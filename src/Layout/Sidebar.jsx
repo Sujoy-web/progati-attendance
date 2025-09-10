@@ -6,6 +6,7 @@ export default function Sidebar() {
 
   const links = [
     { path: "/attendance", label: "RFID Attendance", icon: <FaUserCheck /> },
+     { path: "/timesetup", label: "Time Setup", icon: <FaIdCard /> },
     { path: "/assign", label: "RFID Assignment", icon: <FaIdCard /> },
     { path: "/report", label: "RFID Attendacne Report", icon: <FaIdCard /> },
   ];
