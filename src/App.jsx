@@ -6,18 +6,19 @@ import RfidReport from "./pages/ReportPage";
 import AppLayout from "./Layout/AppLayout";
 import RfidAssignPage from "./pages/RfidAssignPage";
 import AttendanceTimeSetup from "./components/AttendanceTimeSetup";
+import YearPlannerPage from "./components/YearPlanner";
 
 function App() {
   return (
     <Router>
       <Routes>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<RfidAttendancePage/>} />
-            <Route path="/assign" element={<RfidAssignPage/>} />
+          <Route path="/" element={<RfidAttendancePage />} />
+          <Route path="/assign" element={<RfidAssignPage />} />
           <Route path="/attendance" element={<RfidAttendancePage />} />
           <Route path="/report" element={<RfidReport />} />
-             <Route path="/timesetup" element={<AttendanceTimeSetup />} />
-    
+          <Route path="/timesetup" element={<AttendanceTimeSetup />} />
+          <Route path="/year-planner" element={<YearPlannerPage />} />
         </Route>
       </Routes>
     </Router>

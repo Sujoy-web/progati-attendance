@@ -6,15 +6,14 @@ export default function Sidebar() {
 
   const links = [
     { path: "/attendance", label: "RFID Attendance", icon: <FaUserCheck /> },
-     { path: "/timesetup", label: "Time Setup", icon: <FaIdCard /> },
     { path: "/assign", label: "RFID Assignment", icon: <FaIdCard /> },
+     { path: "/year-planner", label: "Year Planner", icon: <FaIdCard /> },
+    { path: "/timesetup", label: "Time Setup", icon: <FaIdCard /> },
     { path: "/report", label: "RFID Attendacne Report", icon: <FaIdCard /> },
   ];
 
   return (
-    <aside className="h-full w-64 bg-gray-900 text-white flex flex-col shadow-lg">
-   
-
+    <aside className="h-full w-64 text-gray-900 bg-white flex flex-col shadow-lg">
       {/* Nav Links */}
       <nav className="flex-1 px-4 py-6 space-y-2">
         {links.map((link) => {
@@ -24,7 +23,7 @@ export default function Sidebar() {
               key={link.path}
               to={link.path}
               className={`flex items-center px-4 py-3 rounded-lg space-x-3 transition-colors ${
-                active ? "bg-blue-600 text-white" : "hover:bg-gray-700"
+                active ? "bg-blue-600 text-white" : "hover:bg-blue-600 hover:text-white"
               }`}
             >
               {link.icon}
