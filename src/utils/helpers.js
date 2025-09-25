@@ -1,0 +1,1 @@
+export const getUniqueId = (s) => `${s.class}-${s.section}-${s.id}`;
