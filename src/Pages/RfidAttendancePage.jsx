@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 export default function RfidAttendancePage() {
   const [manualMode, setManualMode] = useState(false);
+  const [inOutStatus, setInOutStatus] = useState(false); // false for IN, true for OUT
   const [allowedClasses, setAllowedClasses] = useState({
     in: ['1', '2', '3'],
     out: ['4']
@@ -26,7 +27,16 @@ export default function RfidAttendancePage() {
       if (e.key === 'Enter') {
         if (rfidInputRef.current) {
           // Process RFID scan here
-          console.log('RFID scanned:', rfidInputRef.current);
+          if (manualMode) {
+            // In manual mode, use the selected IN/OUT status
+            const status = inOutStatus ? 'OUT' : 'IN';
+            console.log(`RFID scanned: ${rfidInputRef.current}, Status: ${status}`);
+            // Here you would typically call your attendance API
+          } else {
+            // In auto mode, determine status based on allowed classes
+            console.log('RFID scanned:', rfidInputRef.current);
+            // You could add logic here to determine if it's IN or OUT based on allowed classes
+          }
           rfidInputRef.current = '';
         }
       } else if (/^[0-9]$/.test(e.key)) {
@@ -36,7 +46,7 @@ export default function RfidAttendancePage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [manualMode, inOutStatus]);
 
   // Toggle manual mode
   const toggleManualMode = () => {
@@ -100,6 +110,37 @@ export default function RfidAttendancePage() {
                     {cls}
                   </span>
                 ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Mode - In/Out Toggle */}
+      {manualMode && (
+        <div className="flex justify-center mt-4">
+          <div className="bg-gray-800 rounded-lg p-4">
+            <div className="flex items-center space-x-4">
+              <span className="text-gray-300 font-medium">Status:</span>
+              
+              {/* In/Out Toggle */}
+              <div className="flex items-center bg-gray-700 rounded-full p-1">
+                <button
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                    !inOutStatus ? 'bg-green-600 text-white' : 'bg-transparent text-gray-300'
+                  }`}
+                  onClick={() => setInOutStatus(false)}
+                >
+                  IN
+                </button>
+                <button
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                    inOutStatus ? 'bg-red-600 text-white' : 'bg-transparent text-gray-300'
+                  }`}
+                  onClick={() => setInOutStatus(true)}
+                >
+                  OUT
+                </button>
               </div>
             </div>
           </div>

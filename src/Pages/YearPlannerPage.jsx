@@ -28,7 +28,6 @@ export default function YearPlannerPage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        setLoading(true);
         const [sessionsData, holidaysData] = await Promise.all([
           fetchSessions(),
           fetchHolidays()
@@ -38,8 +37,6 @@ export default function YearPlannerPage() {
       } catch (error) {
         showStatus("Failed to load data", "error");
         console.error("Error loading data:", error);
-      } finally {
-        setLoading(false);
       }
     };
     loadData();
