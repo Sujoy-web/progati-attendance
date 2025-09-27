@@ -1,15 +1,25 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { FaCheckCircle, FaExclamationTriangle, FaTimes } from "react-icons/fa";
 
-// Import services
-import { assignApi } from "../services/assignApi";
-
-// Import utils
+// Import utils & components (keep as-is)
 import { getUniqueId } from "../utils/helpers";
 import SelectedStudentCard from "../Components/Assign/SelectedStudentCard";
 import SearchAndInput from "../Components/Assign/SearchAndInput";
 import FiltersBar from "../Components/Assign/FilterBar";
 import StudentsTable from "../Components/Assign/StudentsTable";
+
+// ====== MOCK DATA (since backend doesn't provide these) ======
+const MOCK_CLASSES = ['I', 'II', 'III', 'IV', 'V'];
+const MOCK_SECTIONS = ['A', 'B'];
+const MOCK_SESSIONS = ['2024-2025', '2025-2026'];
+
+const MOCK_STUDENTS = [
+  { id: 1, name: 'John Smith', roll: '01', adm: 'ADM000001', class: 'I', section: 'A', session: '2024-2025', rfid: '1001' },
+  { id: 2, name: 'Emily Johnson', roll: '02', adm: 'ADM000002', class: 'II', section: 'B', session: '2024-2025', rfid: '' },
+  { id: 3, name: 'Michael Brown', roll: '03', adm: 'ADM000003', class: 'III', section: 'A', session: '2025-2026', rfid: '3003' },
+  { id: 4, name: 'Sarah Davis', roll: '04', adm: 'ADM000004', class: 'IV', section: 'A', session: '2024-2025', rfid: '' },
+  { id: 5, name: 'Robert Wilson', roll: '05', adm: 'ADM000005', class: 'V', section: 'B', session: '2025-2026', rfid: '' },
+];
 
 export default function RfidAssignPage() {
   // ================== State ==================
@@ -25,7 +35,7 @@ export default function RfidAssignPage() {
 
   const [rfid, setRfid] = useState("");
   const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(false); // Only for initial load
+  const [loading, setLoading] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -35,99 +45,130 @@ export default function RfidAssignPage() {
   const studentsRef = useRef([]);
   const selectedStudentRef = useRef(null);
   const rfidRef = useRef("");
-  const nextUnassignedIndexRef = useRef(0); // 👈 Track next student
+  const nextUnassignedIndexRef = useRef(0);
 
   const showStatus = useCallback((msg, type) => {
     setStatus({ msg, type });
     setTimeout(() => setStatus(null), 3000);
   }, []);
 
+  // ================== REAL API CALLS (RFID only) ==================
+  const assignRfidToStudent = async (student, rfidValue) => {
+    const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+    const card = parseInt(rfidValue, 10);
+    if (isNaN(card)) throw new Error("Invalid RFID number");
+
+    const response = await fetch(`${BASE_URL}/assignments/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: student.id, card })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `HTTP ${response.status}`);
+    }
+    return response.json();
+  };
+
+  const removeRfidFromStudent = async (student) => {
+    const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+    
+    // Get assignment by user_id
+    const assignmentsRes = await fetch(`${BASE_URL}/assignments/user/${student.id}`);
+    if (!assignmentsRes.ok) throw new Error("Failed to find assignment");
+    
+    const assignments = await assignmentsRes.json();
+    if (!assignments.length) throw new Error("No assignment found");
+
+    // Delete by assignment ID
+    const deleteRes = await fetch(`${BASE_URL}/assignments/${assignments[0].id}`, {
+      method: 'DELETE'
+    });
+    if (!deleteRes.ok) throw new Error("Failed to delete assignment");
+    
+    return { message: "Assignment deleted" };
+  };
+
   // ================== Core Logic ==================
-const assignRfid = useCallback(async (shouldClearRfid = true) => {
-  const rfidValue = rfidRef.current.trim();
-  if (!rfidValue) {
-    showStatus("Scan RFID first", "error");
-    if (shouldClearRfid) setRfid("");
-    inputRef.current?.focus();
-    return;
-  }
-
-  // 🔒 Block if RFID is already used by ANY student (including the selected one)
-  const isRfidAlreadyUsed = studentsRef.current.some(s => s.rfid === rfidValue);
-  if (isRfidAlreadyUsed) {
-    showStatus("This RFID is already assigned to another student", "error");
-    if (shouldClearRfid) setRfid("");
-    inputRef.current?.focus();
-    return;
-  }
-
-  try {
-    // ✅ Case 1: Manual selection
-    if (selectedStudentRef.current) {
-      const selected = selectedStudentRef.current;
-
-      // ❌ Prevent assigning to a student who already has an RFID
-      if (selected.rfid) {
-        showStatus(`${selected.name} already has an RFID. Remove it first.`, "error");
-        if (shouldClearRfid) setRfid("");
-        inputRef.current?.focus();
-        return;
-      }
-
-      // ✅ Safe to assign
-      await assignApi.assignRfidToStudent(selected, rfidValue);
-      setStudents(prev =>
-        prev.map(s =>
-          getUniqueId(s) === getUniqueId(selected) ? { ...s, rfid: rfidValue } : s
-        )
-      );
-      showStatus(`RFID assigned to ${selected.name}`, "success");
-      setSelectedStudent(null); // Clear selection after assignment
+  const assignRfid = useCallback(async (shouldClearRfid = true) => {
+    const rfidValue = rfidRef.current.trim();
+    if (!rfidValue) {
+      showStatus("Scan RFID first", "error");
+      if (shouldClearRfid) setRfid("");
+      inputRef.current?.focus();
+      return;
     }
-    // ✅ Case 2: Auto-assign to next unassigned
-    else {
-      const currentList = studentsRef.current;
-      let foundIndex = -1;
-      const start = nextUnassignedIndexRef.current;
 
-      for (let i = 0; i < currentList.length; i++) {
-        const idx = (start + i) % currentList.length;
-        if (!currentList[idx].rfid) {
-          foundIndex = idx;
-          break;
+    const isRfidAlreadyUsed = studentsRef.current.some(s => s.rfid === rfidValue);
+    if (isRfidAlreadyUsed) {
+      showStatus("This RFID is already assigned to another student", "error");
+      if (shouldClearRfid) setRfid("");
+      inputRef.current?.focus();
+      return;
+    }
+
+    try {
+      if (selectedStudentRef.current) {
+        const selected = selectedStudentRef.current;
+        if (selected.rfid) {
+          showStatus(`${selected.name} already has an RFID. Remove it first.`, "error");
+          if (shouldClearRfid) setRfid("");
+          inputRef.current?.focus();
+          return;
         }
+
+        await assignRfidToStudent(selected, rfidValue);
+        setStudents(prev =>
+          prev.map(s =>
+            getUniqueId(s) === getUniqueId(selected) ? { ...s, rfid: rfidValue } : s
+          )
+        );
+        showStatus(`RFID assigned to ${selected.name}`, "success");
+        setSelectedStudent(null);
+      } else {
+        const currentList = studentsRef.current;
+        let foundIndex = -1;
+        const start = nextUnassignedIndexRef.current;
+
+        for (let i = 0; i < currentList.length; i++) {
+          const idx = (start + i) % currentList.length;
+          if (!currentList[idx].rfid) {
+            foundIndex = idx;
+            break;
+          }
+        }
+
+        if (foundIndex === -1) {
+          showStatus("No unassigned student found", "error");
+          if (shouldClearRfid) setRfid("");
+          inputRef.current?.focus();
+          return;
+        }
+
+        const studentToAssign = currentList[foundIndex];
+        await assignRfidToStudent(studentToAssign, rfidValue);
+
+        setStudents(prev => {
+          const updated = [...prev];
+          updated[foundIndex].rfid = rfidValue;
+          return updated;
+        });
+
+        nextUnassignedIndexRef.current = (foundIndex + 1) % currentList.length;
+        showStatus(`RFID assigned to ${studentToAssign.name}`, "success");
       }
 
-      if (foundIndex === -1) {
-        showStatus("No unassigned student found", "error");
-        if (shouldClearRfid) setRfid("");
-        inputRef.current?.focus();
-        return;
-      }
-
-      const studentToAssign = currentList[foundIndex];
-      await assignApi.assignRfidToStudent(studentToAssign, rfidValue);
-
-      setStudents(prev => {
-        const updated = [...prev];
-        updated[foundIndex].rfid = rfidValue;
-        return updated;
-      });
-
-      nextUnassignedIndexRef.current = (foundIndex + 1) % currentList.length;
-      showStatus(`RFID assigned to ${studentToAssign.name}`, "success");
+      if (shouldClearRfid) setRfid("");
+      inputRef.current?.focus();
+    } catch (error) {
+      console.error("Error assigning RFID:", error);
+      showStatus("Failed to assign RFID. Try again.", "error");
+      if (shouldClearRfid) setRfid("");
+      inputRef.current?.focus();
     }
+  }, [showStatus]);
 
-    // Clean up
-    if (shouldClearRfid) setRfid("");
-    inputRef.current?.focus();
-  } catch (error) {
-    console.error("Error assigning RFID:", error);
-    showStatus("Failed to assign RFID. Try again.", "error");
-    if (shouldClearRfid) setRfid("");
-    inputRef.current?.focus();
-  }
-}, [showStatus]);
   // ================== Effects ==================
   useEffect(() => {
     studentsRef.current = students;
@@ -141,14 +182,16 @@ const assignRfid = useCallback(async (shouldClearRfid = true) => {
     rfidRef.current = rfid;
   }, [rfid]);
 
-  // Load dropdowns
+  // Load dropdowns (from MOCK)
   useEffect(() => {
+    // Simulate async load
     const loadDropdownOptions = async () => {
       try {
-        const { classes, sections, sessions } = await assignApi.getDropdownOptions();
-        setClasses(classes);
-        setSections(sections);
-        setSessions(sessions);
+        // In real app, this would be an API call.
+        // For now, use mock data.
+        setClasses(MOCK_CLASSES);
+        setSections(MOCK_SECTIONS);
+        setSessions(MOCK_SESSIONS);
       } catch (error) {
         console.error("Error loading dropdown options:", error);
         showStatus("Failed to load options", "error");
@@ -157,15 +200,18 @@ const assignRfid = useCallback(async (shouldClearRfid = true) => {
     loadDropdownOptions();
   }, [showStatus]);
 
-  // Load students (including when no filters)
+  // Load students (from MOCK, filtered)
   useEffect(() => {
     const loadStudents = async () => {
       setLoading(true);
       try {
-        const loadedStudents = await assignApi.getStudents(classSel, sectionSel, sessionSel);
-        setStudents(loadedStudents);
+        let loaded = [...MOCK_STUDENTS];
+        if (classSel) loaded = loaded.filter(s => s.class === classSel);
+        if (sectionSel) loaded = loaded.filter(s => s.section === sectionSel);
+        if (sessionSel) loaded = loaded.filter(s => s.session === sessionSel);
+        setStudents(loaded);
         setSelectedStudent(null);
-        nextUnassignedIndexRef.current = 0; // Reset pointer on filter change
+        nextUnassignedIndexRef.current = 0;
       } catch (error) {
         console.error("Error loading students:", error);
         showStatus("Failed to load students", "error");
@@ -191,7 +237,7 @@ const assignRfid = useCallback(async (shouldClearRfid = true) => {
   // Handle remove
   const handleRemove = async (student) => {
     try {
-      await assignApi.removeRfidFromStudent(student);
+      await removeRfidFromStudent(student);
       setStudents(prev =>
         prev.map(s =>
           getUniqueId(s) === getUniqueId(student) ? { ...s, rfid: "" } : s
@@ -229,7 +275,6 @@ const assignRfid = useCallback(async (shouldClearRfid = true) => {
     inputRef.current?.focus();
   };
 
-  // Filtering
   const filtered = students.filter((s) => {
     const matchesSearch =
       !searchTerm ||
@@ -288,7 +333,7 @@ const assignRfid = useCallback(async (shouldClearRfid = true) => {
         rfid={rfid}
         setRfid={setRfid}
         assignRfid={assignRfid}
-        loading={loading} // Only shows on initial load
+        loading={loading}
       />
 
       {selectedStudent && (
