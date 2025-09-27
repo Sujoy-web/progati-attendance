@@ -5,8 +5,9 @@ import AppLayout from "./Layout/AppLayout";
 import AssignPage from "./Pages/AssignPage";
 import YearPlannerPage from './Pages/YearPlannerPage';
 import TimeSetupPage from './Pages/TimeSetupPage';
-import Signup from './Components/SignupPage/Signup';
+
 import Signin from './Components/Signin/Signin';
+import CardSignin from './Components/Signin/CardSignin';
 import RfidAttendancePage from './Pages/RfidAttendancePage';
 
 function App() {
@@ -15,9 +16,10 @@ function App() {
       <Router>
         <Routes>
           {/* Public routes - no layout */}
-          <Route path="/" element={<Signin />} />
+          <Route path="/" element={<CardSignin />} />
           <Route path="/signin" element={<Signin />} />
-          <Route path="/signup" element={<Signup />} />
+          <Route path="/card-signin" element={<CardSignin />} />
+         
           <Route path="/attendance" element={<RfidAttendancePage />} />
           {/* Protected routes with layout */}
           <Route element={<AppLayout />}>
