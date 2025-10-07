@@ -1,15 +1,58 @@
 // pages/YearPlannerPage.jsx
 import React, { useState, useEffect } from "react";
 
-// API Service
-import { 
-  fetchSessions, 
-  fetchHolidays, 
-  createHoliday, 
-  updateHoliday, 
-  deleteHoliday as apiDeleteHoliday, 
-  toggleHolidayStatus 
-} from "../services/yearPlannerApi";
+// Define API base URL directly in this file
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+
+// --- Inline API Functions ---
+const fetchSessions = async () => {
+  const response = await fetch(`${API_BASE_URL}/sessions`);
+  if (!response.ok) throw new Error('Failed to fetch sessions');
+  return response.json();
+};
+
+const fetchHolidays = async () => {
+  const response = await fetch(`${API_BASE_URL}/holidays`);
+  if (!response.ok) throw new Error('Failed to fetch holidays');
+  return response.json();
+};
+
+const createHoliday = async (holidayData) => {
+  const response = await fetch(`${API_BASE_URL}/holidays`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(holidayData),
+  });
+  if (!response.ok) throw new Error('Failed to create holiday');
+  return response.json();
+};
+
+const updateHoliday = async (id, holidayData) => {
+  const response = await fetch(`${API_BASE_URL}/holidays/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(holidayData),
+  });
+  if (!response.ok) throw new Error('Failed to update holiday');
+  return response.json();
+};
+
+const deleteHoliday = async (id) => {
+  const response = await fetch(`${API_BASE_URL}/holidays/${id}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error('Failed to delete holiday');
+  return true;
+};
+
+const toggleHolidayStatus = async (id) => {
+  const response = await fetch(`${API_BASE_URL}/holidays/${id}/toggle-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) throw new Error('Failed to toggle holiday status');
+  return response.json();
+};
+
+// --- Components ---
 import HolidayTable from "../Components/YearPlanner/HolidayTable";
 import HolidayActions from "../Components/YearPlanner/HolidayActions";
 import HolidayForm from "../Components/YearPlanner/HolidayForm";
@@ -17,30 +60,12 @@ import StatusMessage from "../Components/YearPlanner/StatusMessage";
 
 export default function YearPlannerPage() {
   const [holidays, setHolidays] = useState([]);
-  const [sessions, setSessions] = useState([]);
+  const [sessions, setSessions] = useState([]); // [{ id, name }]
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: "", start: "", end: "" });
-
-  // Load sessions and holidays on mount
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [sessionsData, holidaysData] = await Promise.all([
-          fetchSessions(),
-          fetchHolidays()
-        ]);
-        setSessions(sessionsData);
-        setHolidays(holidaysData);
-      } catch (error) {
-        showStatus("Failed to load data", "error");
-        console.error("Error loading data:", error);
-      }
-    };
-    loadData();
-  }, []);
 
   const showStatus = (msg, type) => {
     setStatus({ msg, type });
@@ -54,16 +79,50 @@ export default function YearPlannerPage() {
     return diff > 0 ? diff : 0;
   };
 
-  // CRUD operations using API
-  const addHoliday = async ({ session, name, start, end }) => {
-    if (!session || !name || !start || !end) {
+  // Load sessions and holidays on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [sessionsData, holidaysData] = await Promise.all([
+          fetchSessions(),
+          fetchHolidays()
+        ]);
+
+        const enrichedHolidays = holidaysData.map(holiday => {
+          const session = sessionsData.find(s => s.id === holiday.session_id);
+          return {
+            ...holiday,
+            session_name: session ? session.name : "Unknown Session"
+          };
+        });
+
+        setSessions(sessionsData);
+        setHolidays(enrichedHolidays);
+      } catch (error) {
+        showStatus("Failed to load data", "error");
+        console.error("Error loading data:", error);
+      }
+    };
+    loadData();
+  }, []);
+
+  // CRUD: Add Holiday
+  const addHoliday = async ({ session_id, name, start, end }) => {
+    if (!session_id || !name || !start || !end) {
       return showStatus("Fill all fields", "error");
     }
     
     try {
       setLoading(true);
-      const newHoliday = await createHoliday({ session, name, start, end });
-      setHolidays(prev => [...prev, newHoliday]);
+      const newHoliday = await createHoliday({ session_id, name, start, end });
+      
+      const session = sessions.find(s => s.id === session_id);
+      const enrichedHoliday = {
+        ...newHoliday,
+        session_name: session ? session.name : "Unknown Session"
+      };
+
+      setHolidays(prev => [...prev, enrichedHoliday]);
       showStatus("Holiday added successfully", "success");
     } catch (error) {
       showStatus("Failed to add holiday", "error");
@@ -73,12 +132,18 @@ export default function YearPlannerPage() {
     }
   };
 
+  // Toggle active status
   const toggleActive = async (id) => {
     try {
       const updatedHoliday = await toggleHolidayStatus(id);
+      const session = sessions.find(s => s.id === updatedHoliday.session_id);
+      const enriched = {
+        ...updatedHoliday,
+        session_name: session ? session.name : "Unknown Session"
+      };
       setHolidays(prev => 
         prev.map(holiday => 
-          holiday.id === id ? updatedHoliday : holiday
+          holiday.id === id ? enriched : holiday
         )
       );
     } catch (error) {
@@ -87,9 +152,10 @@ export default function YearPlannerPage() {
     }
   };
 
-  const deleteHoliday = async (id) => {
+  // Delete holiday
+  const handleDeleteHoliday = async (id) => {
     try {
-      await apiDeleteHoliday(id);
+      await deleteHoliday(id);
       setHolidays(prev => prev.filter(holiday => holiday.id !== id));
       showStatus("Holiday deleted", "success");
     } catch (error) {
@@ -98,6 +164,7 @@ export default function YearPlannerPage() {
     }
   };
 
+  // Edit helpers
   const startEditing = (h) => {
     setEditingId(h.id);
     setEditForm({ name: h.name, start: h.start, end: h.end });
@@ -107,9 +174,16 @@ export default function YearPlannerPage() {
     try {
       setLoading(true);
       const updatedHoliday = await updateHoliday(id, editForm);
+      
+      const session = sessions.find(s => s.id === updatedHoliday.session_id);
+      const enriched = {
+        ...updatedHoliday,
+        session_name: session ? session.name : "Unknown Session"
+      };
+
       setHolidays(prev => 
         prev.map(holiday => 
-          holiday.id === id ? { ...holiday, ...updatedHoliday } : holiday
+          holiday.id === id ? enriched : holiday
         )
       );
       setEditingId(null);
@@ -122,6 +196,7 @@ export default function YearPlannerPage() {
     }
   };
 
+  // Export to CSV
   const exportCSV = () => {
     const headers = ["Sl", "Holiday Name", "Session", "Start Date", "End Date", "Total Days"];
     const activeHolidays = holidays.filter((h) => h.active);
@@ -130,7 +205,7 @@ export default function YearPlannerPage() {
       ...activeHolidays.map((h, i) => [
         i + 1,
         `"${h.name}"`,
-        `"${h.session}"`,
+        `"${h.session_name}"`,
         h.start,
         h.end,
         calcDays(h.start, h.end),
@@ -147,8 +222,11 @@ export default function YearPlannerPage() {
     showStatus("Exported to CSV successfully", "success");
   };
 
+  // Print table
   const printTable = () => {
-    const table = document.getElementById("holidayTable").cloneNode(true);
+    const table = document.getElementById("holidayTable")?.cloneNode(true);
+    if (!table) return;
+    
     const newWin = window.open("", "_blank", "width=900,height=700");
     newWin.document.write(`<html><head><title>Holiday Planner</title><style>
       body{font-family:Arial,sans-serif;padding:20px;color:#333;}
@@ -162,12 +240,12 @@ export default function YearPlannerPage() {
     setTimeout(() => newWin.print(), 250);
   };
 
-  // Filtered holidays
+  // Filter holidays
   const filtered = holidays.filter(
     (h) =>
       searchTerm === "" ||
       h.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      h.session.toLowerCase().includes(searchTerm.toLowerCase())
+      h.session_name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -179,17 +257,23 @@ export default function YearPlannerPage() {
         <p className="text-gray-400">Manage and track holidays for academic sessions</p>
       </div>
 
-      <HolidayForm sessions={sessions} addHoliday={addHoliday} loading={loading} />
+      <HolidayForm 
+        sessions={sessions} 
+        addHoliday={addHoliday} 
+        loading={loading} 
+      />
+      
       <HolidayActions
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
         exportCSV={exportCSV}
         printTable={printTable}
       />
+      
       <HolidayTable
         holidays={filtered}
         toggleActive={toggleActive}
-        deleteHoliday={deleteHoliday}
+        deleteHoliday={handleDeleteHoliday}
         startEditing={startEditing}
         editingId={editingId}
         editForm={editForm}
@@ -207,9 +291,3 @@ export default function YearPlannerPage() {
     </div>
   );
 }
-
-
-
-
-
-

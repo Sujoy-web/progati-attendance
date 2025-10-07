@@ -1,8 +1,13 @@
 import { FaSearch, FaTrash } from "react-icons/fa";
 
 export default function StudentsTable({ 
-  students, selectedStudent, handleRowDoubleClick, 
-  handleRemove, loading, getUniqueId 
+  students, 
+  selectedStudent, 
+  handleRowDoubleClick, 
+  handleRemove, 
+  loading, 
+  getUniqueId
+  // REMOVED: classes, sections, sessions props since we don't need them anymore
 }) {
   return (
     <div className="max-w-6xl mx-auto overflow-x-auto rounded-lg border border-gray-700">
@@ -42,6 +47,7 @@ export default function StudentsTable({
                 <td className="p-3">{s.name}</td>
                 <td className="p-3">{s.roll}</td>
                 <td className="p-3 font-mono">{s.adm}</td>
+                {/* FIXED: Use the direct string values instead of ID lookups */}
                 <td className="p-3">{s.class}</td>
                 <td className="p-3">{s.section}</td>
                 <td className="p-3">{s.session}</td>

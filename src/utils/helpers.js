@@ -1,1 +1,4 @@
-export const getUniqueId = (s) => `${s.class}-${s.section}-${s.id}`;
+// Simple unique ID generator
+export const getUniqueId = (student) => {
+  return student.id || `${student.name}-${student.roll}-${student.adm}`;
+};

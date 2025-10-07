@@ -1050,7 +1050,7 @@ export default function TimeSetupPage() {
                                   .map((dateItem, index) => (
                                 <tr 
                                   key={`${dateItem.date}-${index}`} 
-                                  className={`border-b border-gray-500 hover:bg-gray-550 ${dateItem.isOffDay ? 'bg-red-900 bg-opacity-30' : ''}`}
+                                  className={`border-b border-gray-500 hover:bg-gray-550 ${dateItem.isOffDay ? 'bg-red-900 bg-opacity-30' : ''} ${dateItem.isDuplicate ? 'bg-blue-900 bg-opacity-30' : ''}`}
                                 >
                                   <td className={`py-2 px-4 border border-gray-500 ${dateItem.isOffDay ? 'text-red-300' : 'text-gray-200'}`}>
                                     {index + 1}
@@ -1088,21 +1088,30 @@ export default function TimeSetupPage() {
                                     />
                                   </td>
                                   <td className="py-2 px-4 border border-gray-500">
-                                    <select
-                                      className="w-full p-1 rounded bg-gray-700 border border-gray-500 text-white text-sm"
-                                      onChange={(e) => duplicateDateForClass(setup.id, dateItem, e.target.value)}
-                                      value=""
-                                    >
-                                      <option value="">Select Class</option>
-                                      {setup.selectedClasses.map(value => {
-                                        const classOption = classOptions.find(opt => opt.value === value);
-                                        return (
-                                          <option key={value} value={value}>
-                                            {classOption ? classOption.label : ''}
-                                          </option>
-                                        );
-                                      })}
-                                    </select>
+                                    {dateItem.isDuplicate ? (
+                                      <div className="text-blue-300 font-medium">
+                                        {(() => {
+                                          const classOption = classOptions.find(opt => opt.value === dateItem.class);
+                                          return classOption ? classOption.label : dateItem.class;
+                                        })()}
+                                      </div>
+                                    ) : (
+                                      <select
+                                        className="w-full p-1 rounded bg-gray-700 border border-gray-500 text-white text-sm"
+                                        onChange={(e) => duplicateDateForClass(setup.id, dateItem, e.target.value)}
+                                        value=""
+                                      >
+                                        <option value="">Select Class</option>
+                                        {setup.selectedClasses.map(value => {
+                                          const classOption = classOptions.find(opt => opt.value === value);
+                                          return (
+                                            <option key={value} value={value}>
+                                              {classOption ? classOption.label : ''}
+                                            </option>
+                                          );
+                                        })}
+                                      </select>
+                                    )}
                                   </td>
                                   <td className="py-2 px-4 border border-gray-500">
                                     {dateItem.isDuplicate ? (

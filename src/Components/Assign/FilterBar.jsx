@@ -15,6 +15,7 @@ export default function FiltersBar({
         <option value="">Class</option>
         {classes.map((c) => <option key={c} value={c}>{c}</option>)}
       </select>
+
       <select 
         value={sectionSel} 
         onChange={(e) => setSectionSel(e.target.value)} 
@@ -23,6 +24,7 @@ export default function FiltersBar({
         <option value="">Section</option>
         {sections.map((s) => <option key={s} value={s}>{s}</option>)}
       </select>
+
       <select 
         value={sessionSel} 
         onChange={(e) => setSessionSel(e.target.value)} 
@@ -31,6 +33,7 @@ export default function FiltersBar({
         <option value="">Session</option>
         {sessions.map((s) => <option key={s} value={s}>{s}</option>)}
       </select>
+
       <select 
         value={filter} 
         onChange={(e) => setFilter(e.target.value)} 

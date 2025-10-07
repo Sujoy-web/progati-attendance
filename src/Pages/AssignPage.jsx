@@ -1,309 +1,239 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { FaCheckCircle, FaExclamationTriangle, FaTimes } from "react-icons/fa";
 
-// Import utils & components (keep as-is)
-import { getUniqueId } from "../utils/helpers";
-import SelectedStudentCard from "../Components/Assign/SelectedStudentCard";
-import SearchAndInput from "../Components/Assign/SearchAndInput";
 import FiltersBar from "../Components/Assign/FilterBar";
+import SearchAndInput from "../Components/Assign/SearchAndInput";
+import SelectedStudentCard from "../Components/Assign/SelectedStudentCard";
 import StudentsTable from "../Components/Assign/StudentsTable";
+import { getUniqueId } from "../utils/helpers";
 
-// ====== MOCK DATA (since backend doesn't provide these) ======
-const MOCK_CLASSES = ['I', 'II', 'III', 'IV', 'V'];
-const MOCK_SECTIONS = ['A', 'B'];
-const MOCK_SESSIONS = ['2024-2025', '2025-2026'];
+// ✅ Clean API URL (removed trailing spaces)
+const BASE_URL = "https://your-backend-api.com/api";
 
-const MOCK_STUDENTS = [
-  { id: 1, name: 'John Smith', roll: '01', adm: 'ADM000001', class: 'I', section: 'A', session: '2024-2025', rfid: '1001' },
-  { id: 2, name: 'Emily Johnson', roll: '02', adm: 'ADM000002', class: 'II', section: 'B', session: '2024-2025', rfid: '' },
-  { id: 3, name: 'Michael Brown', roll: '03', adm: 'ADM000003', class: 'III', section: 'A', session: '2025-2026', rfid: '3003' },
-  { id: 4, name: 'Sarah Davis', roll: '04', adm: 'ADM000004', class: 'IV', section: 'A', session: '2024-2025', rfid: '' },
-  { id: 5, name: 'Robert Wilson', roll: '05', adm: 'ADM000005', class: 'V', section: 'B', session: '2025-2026', rfid: '' },
-];
+// 🧪 Mock data
+const mockFetch = (url) =>
+  new Promise((resolve) => {
+    setTimeout(() => {
+      if (url.includes("/classes")) {
+        resolve({ ok: true, json: () => Promise.resolve(["Class V", "Class VI", "Class VII"]) });
+      } else if (url.includes("/sections")) {
+        resolve({ ok: true, json: () => Promise.resolve(["A", "B", "C"]) });
+      } else if (url.includes("/sessions")) {
+        resolve({ ok: true, json: () => Promise.resolve(["2024–2025", "2025–2026"]) });
+      } else if (url.includes("/students")) {
+        // Parse query params
+        const urlObj = new URL(url, "http://mock");
+        const className = urlObj.searchParams.get("class");
+        const sectionName = urlObj.searchParams.get("section");
+        const sessionName = urlObj.searchParams.get("session");
 
-export default function RfidAssignPage() {
-  // ================== State ==================
-  const [students, setStudents] = useState([]);
+        const MOCK_STUDENTS = [
+          { id: 1, name: "Alice Johnson", roll: "01", adm: "ADM1001", class: className, section: sectionName, session: sessionName, rfid: "123456" },
+          { id: 2, name: "Bob Smith", roll: "02", adm: "ADM1002", class: className, section: sectionName, session: sessionName, rfid: null },
+          { id: 3, name: "Charlie Brown", roll: "03", adm: "ADM1003", class: className, section: sectionName, session: sessionName, rfid: null },
+          { id: 4, name: "Diana Prince", roll: "04", adm: "ADM1004", class: className, section: sectionName, session: sessionName, rfid: "789012" },
+          { id: 5, name: "Ethan Hunt", roll: "05", adm: "ADM1005", class: className, section: sectionName, session: sessionName, rfid: null },
+        ];
+
+        resolve({ ok: true, json: () => Promise.resolve(MOCK_STUDENTS) });
+      } else {
+        resolve({ ok: false });
+      }
+    }, 300);
+  });
+
+const apiFetch = async (url, options = {}) => {
+  try {
+    const res = await fetch(url, options);
+    if (!res.ok) throw new Error();
+    return res;
+  } catch {
+    console.warn("⚠️ Using mock data for:", url);
+    return mockFetch(url);
+  }
+};
+
+export default function AssignPage() {
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
   const [sessions, setSessions] = useState([]);
 
+  // Start with empty selections
   const [classSel, setClassSel] = useState("");
   const [sectionSel, setSectionSel] = useState("");
   const [sessionSel, setSessionSel] = useState("");
   const [filter, setFilter] = useState("all");
 
+  const [rawStudents, setRawStudents] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [rfid, setRfid] = useState("");
   const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const inputRef = useRef(null);
   const searchRef = useRef(null);
-  const rfidTimeoutRef = useRef(null);
-  const studentsRef = useRef([]);
-  const selectedStudentRef = useRef(null);
-  const rfidRef = useRef("");
+  const inputRef = useRef(null);
   const nextUnassignedIndexRef = useRef(0);
+  const assignedRfidSetRef = useRef(new Set());
 
-  const showStatus = useCallback((msg, type) => {
-    setStatus({ msg, type });
-    setTimeout(() => setStatus(null), 3000);
-  }, []);
-
-  // ================== REAL API CALLS (RFID only) ==================
-  const assignRfidToStudent = async (student, rfidValue) => {
-    const BASE_URL = import.meta.env.VITE_API_URL || '/api';
-    const card = parseInt(rfidValue, 10);
-    if (isNaN(card)) throw new Error("Invalid RFID number");
-
-    const response = await fetch(`${BASE_URL}/assignments/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: student.id, card })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `HTTP ${response.status}`);
-    }
-    return response.json();
-  };
-
-  const removeRfidFromStudent = async (student) => {
-    const BASE_URL = import.meta.env.VITE_API_URL || '/api';
-    
-    // Get assignment by user_id
-    const assignmentsRes = await fetch(`${BASE_URL}/assignments/user/${student.id}`);
-    if (!assignmentsRes.ok) throw new Error("Failed to find assignment");
-    
-    const assignments = await assignmentsRes.json();
-    if (!assignments.length) throw new Error("No assignment found");
-
-    // Delete by assignment ID
-    const deleteRes = await fetch(`${BASE_URL}/assignments/${assignments[0].id}`, {
-      method: 'DELETE'
-    });
-    if (!deleteRes.ok) throw new Error("Failed to delete assignment");
-    
-    return { message: "Assignment deleted" };
-  };
-
-  // ================== Core Logic ==================
-  const assignRfid = useCallback(async (shouldClearRfid = true) => {
-    const rfidValue = rfidRef.current.trim();
-    if (!rfidValue) {
-      showStatus("Scan RFID first", "error");
-      if (shouldClearRfid) setRfid("");
-      inputRef.current?.focus();
-      return;
-    }
-
-    const isRfidAlreadyUsed = studentsRef.current.some(s => s.rfid === rfidValue);
-    if (isRfidAlreadyUsed) {
-      showStatus("This RFID is already assigned to another student", "error");
-      if (shouldClearRfid) setRfid("");
-      inputRef.current?.focus();
-      return;
-    }
-
-    try {
-      if (selectedStudentRef.current) {
-        const selected = selectedStudentRef.current;
-        if (selected.rfid) {
-          showStatus(`${selected.name} already has an RFID. Remove it first.`, "error");
-          if (shouldClearRfid) setRfid("");
-          inputRef.current?.focus();
-          return;
-        }
-
-        await assignRfidToStudent(selected, rfidValue);
-        setStudents(prev =>
-          prev.map(s =>
-            getUniqueId(s) === getUniqueId(selected) ? { ...s, rfid: rfidValue } : s
-          )
-        );
-        showStatus(`RFID assigned to ${selected.name}`, "success");
-        setSelectedStudent(null);
-      } else {
-        const currentList = studentsRef.current;
-        let foundIndex = -1;
-        const start = nextUnassignedIndexRef.current;
-
-        for (let i = 0; i < currentList.length; i++) {
-          const idx = (start + i) % currentList.length;
-          if (!currentList[idx].rfid) {
-            foundIndex = idx;
-            break;
-          }
-        }
-
-        if (foundIndex === -1) {
-          showStatus("No unassigned student found", "error");
-          if (shouldClearRfid) setRfid("");
-          inputRef.current?.focus();
-          return;
-        }
-
-        const studentToAssign = currentList[foundIndex];
-        await assignRfidToStudent(studentToAssign, rfidValue);
-
-        setStudents(prev => {
-          const updated = [...prev];
-          updated[foundIndex].rfid = rfidValue;
-          return updated;
-        });
-
-        nextUnassignedIndexRef.current = (foundIndex + 1) % currentList.length;
-        showStatus(`RFID assigned to ${studentToAssign.name}`, "success");
-      }
-
-      if (shouldClearRfid) setRfid("");
-      inputRef.current?.focus();
-    } catch (error) {
-      console.error("Error assigning RFID:", error);
-      showStatus("Failed to assign RFID. Try again.", "error");
-      if (shouldClearRfid) setRfid("");
-      inputRef.current?.focus();
-    }
-  }, [showStatus]);
-
-  // ================== Effects ==================
+  // Fetch dropdowns on mount
   useEffect(() => {
-    studentsRef.current = students;
-  }, [students]);
-
-  useEffect(() => {
-    selectedStudentRef.current = selectedStudent;
-  }, [selectedStudent]);
-
-  useEffect(() => {
-    rfidRef.current = rfid;
-  }, [rfid]);
-
-  // Load dropdowns (from MOCK)
-  useEffect(() => {
-    // Simulate async load
-    const loadDropdownOptions = async () => {
+    const fetchDropdowns = async () => {
       try {
-        // In real app, this would be an API call.
-        // For now, use mock data.
-        setClasses(MOCK_CLASSES);
-        setSections(MOCK_SECTIONS);
-        setSessions(MOCK_SESSIONS);
+        const [classRes, sectionRes, sessionRes] = await Promise.all([
+          apiFetch(`${BASE_URL}/classes`),
+          apiFetch(`${BASE_URL}/sections`),
+          apiFetch(`${BASE_URL}/sessions`),
+        ]);
+
+        setClasses(await classRes.json());
+        setSections(await sectionRes.json());
+        setSessions(await sessionRes.json());
       } catch (error) {
-        console.error("Error loading dropdown options:", error);
+        console.error("Error loading dropdowns:", error);
         showStatus("Failed to load options", "error");
       }
     };
-    loadDropdownOptions();
-  }, [showStatus]);
 
-  // Load students (from MOCK, filtered)
+    fetchDropdowns();
+  }, []);
+
+  // Keep global RFID set in sync
   useEffect(() => {
-    const loadStudents = async () => {
-      setLoading(true);
-      try {
-        let loaded = [...MOCK_STUDENTS];
-        if (classSel) loaded = loaded.filter(s => s.class === classSel);
-        if (sectionSel) loaded = loaded.filter(s => s.section === sectionSel);
-        if (sessionSel) loaded = loaded.filter(s => s.session === sessionSel);
-        setStudents(loaded);
-        setSelectedStudent(null);
-        nextUnassignedIndexRef.current = 0;
-      } catch (error) {
-        console.error("Error loading students:", error);
-        showStatus("Failed to load students", "error");
-      } finally {
-        setLoading(false);
-      }
-    };
+    const assigned = new Set();
+    rawStudents.forEach(s => {
+      if (s.rfid) assigned.add(s.rfid);
+    });
+    assignedRfidSetRef.current = assigned;
+  }, [rawStudents]);
 
-    loadStudents();
-  }, [classSel, sectionSel, sessionSel, showStatus]);
+  // Auto-focus RFID input after students load
+  useEffect(() => {
+    if (rawStudents.length > 0) {
+      const timer = setTimeout(() => inputRef.current?.focus(), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [rawStudents]);
 
-  // Auto-assign on RFID input
+  // Reset pointers when filters or list changes
+  useEffect(() => {
+    nextUnassignedIndexRef.current = 0;
+  }, [classSel, sectionSel, sessionSel, filter, rawStudents]);
+
+  // Apply client-side filter (assigned/unassigned)
+  const students = rawStudents.filter((s) =>
+    filter === "assigned"
+      ? s.rfid
+      : filter === "unassigned"
+      ? !s.rfid
+      : true
+  );
+
+  const showStatus = useCallback((msg, type) => {
+    setStatus({ msg, type });
+    setTimeout(() => setStatus(null), 2000);
+  }, []);
+
+  // 🔍 Manual search trigger
+  const handleSearch = async () => {
+    if (!classSel || !sectionSel || !sessionSel) {
+      showStatus("Please select class, section, and session", "error");
+      return;
+    }
+
+    await fetchStudents(classSel, sectionSel, sessionSel);
+  };
+
+  const fetchStudents = async (className, sectionName, sessionName) => {
+    setLoading(true);
+    try {
+      const url = `${BASE_URL}/students?class=${encodeURIComponent(className)}&section=${encodeURIComponent(sectionName)}&session=${encodeURIComponent(sessionName)}`;
+      const res = await apiFetch(url);
+      if (!res.ok) throw new Error("Failed to fetch students");
+      const data = await res.json();
+      setRawStudents(data);
+      setSelectedStudent(null);
+    } catch (error) {
+      console.error("Error loading students:", error);
+      showStatus("Failed to load students", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🔁 Auto-assign with duplicate prevention
+  const assignRfid = useCallback(() => {
+    const rfidValue = rfid.trim();
+    if (!rfidValue) return;
+
+    // 🔒 Prevent duplicate RFID
+    if (assignedRfidSetRef.current.has(rfidValue)) {
+      showStatus("This RFID is already assigned!", "error");
+      setRfid("");
+      setTimeout(() => inputRef.current?.focus(), 50);
+      return;
+    }
+
+    const unassignedStudents = students.filter(s => !s.rfid);
+
+    if (unassignedStudents.length === 0) {
+      showStatus("No unassigned students left", "error");
+      setRfid("");
+      return;
+    }
+
+    const currentIndex = nextUnassignedIndexRef.current % unassignedStudents.length;
+    const studentToAssign = unassignedStudents[currentIndex];
+
+    setRawStudents(prev =>
+      prev.map(s =>
+        s.id === studentToAssign.id ? { ...s, rfid: rfidValue } : s
+      )
+    );
+
+    showStatus(`✅ Assigned to ${studentToAssign.name}`, "success");
+    setRfid("");
+    nextUnassignedIndexRef.current = currentIndex + 1;
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, [rfid, students, showStatus]);
+
+  // Trigger auto-assign on RFID input (debounced)
   useEffect(() => {
     if (rfid.trim()) {
-      if (rfidTimeoutRef.current) clearTimeout(rfidTimeoutRef.current);
-      rfidTimeoutRef.current = setTimeout(() => assignRfid(true), 300);
+      const timeout = setTimeout(assignRfid, 300);
+      return () => clearTimeout(timeout);
     }
-    return () => {
-      if (rfidTimeoutRef.current) clearTimeout(rfidTimeoutRef.current);
-    };
   }, [rfid, assignRfid]);
 
-  // Handle remove
-  const handleRemove = async (student) => {
-    try {
-      await removeRfidFromStudent(student);
-      setStudents(prev =>
-        prev.map(s =>
-          getUniqueId(s) === getUniqueId(student) ? { ...s, rfid: "" } : s
-        )
-      );
-      showStatus(`RFID removed from ${student.name}`, "success");
-      inputRef.current?.focus();
-    } catch (error) {
-      console.error("Error removing RFID:", error);
-      showStatus("Failed to remove RFID", "error");
-    }
-  };
-
+  // Manual search by Enter or button
   const selectFirstMatchingStudent = () => {
     if (!searchTerm.trim()) return;
-    const found = students.find(
+    const term = searchTerm.toLowerCase();
+    const match = students.find(
       (s) =>
-        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.roll.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.adm.toLowerCase().includes(searchTerm.toLowerCase())
+        s.name.toLowerCase().includes(term) ||
+        s.roll.toString().includes(term) ||
+        s.adm.toLowerCase().includes(term)
     );
-    if (found) {
-      setSelectedStudent(found);
-      showStatus(`Selected: ${found.name}`, "success");
+    if (match) {
+      setSelectedStudent(match);
+      showStatus(`Selected: ${match.name}`, "success");
     } else {
-      setSelectedStudent(null);
       showStatus("No student found", "error");
     }
-    inputRef.current?.focus();
   };
 
-  const handleRowDoubleClick = (student) => {
-    setSelectedStudent(student);
-    showStatus(`Selected: ${student.name}`, "success");
-    inputRef.current?.focus();
+  const handleRemove = (student) => {
+    setRawStudents(prev =>
+      prev.map(s => (s.id === student.id ? { ...s, rfid: null } : s))
+    );
+    showStatus("RFID removed", "warning");
+    nextUnassignedIndexRef.current = 0; // reset for re-assignment
   };
 
-  const filtered = students.filter((s) => {
-    const matchesSearch =
-      !searchTerm ||
-      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.roll.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.adm.toLowerCase().includes(searchTerm.toLowerCase());
-
-    if (filter === "assigned") return matchesSearch && s.rfid;
-    if (filter === "unassigned") return matchesSearch && !s.rfid;
-    return matchesSearch;
-  });
-
-  // ================== JSX ==================
   return (
-    <div className="p-4 sm:p-6 bg-gray-900 min-h-screen text-gray-100">
-      {/* Status */}
-      {status && (
-        <div
-          className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg flex items-center gap-3 ${
-            status.type === "success" ? "bg-green-800" : "bg-red-800"
-          }`}
-        >
-          {status.type === "success" ? <FaCheckCircle /> : <FaExclamationTriangle />}
-          <p className="text-white">{status.msg}</p>
-          <button onClick={() => setStatus(null)} className="ml-2 text-white hover:text-gray-200">
-            <FaTimes />
-          </button>
-        </div>
-      )}
+    <div className="p-6 text-gray-100 bg-gray-900 min-h-screen">
+      <h2 className="text-2xl font-semibold mb-4">RFID Assignment</h2>
 
       <FiltersBar
         classes={classes}
@@ -319,6 +249,17 @@ export default function RfidAssignPage() {
         setFilter={setFilter}
       />
 
+      {/* 🔍 Search Button */}
+      <div className="max-w-6xl mx-auto mb-4 flex justify-end">
+        <button
+          onClick={handleSearch}
+          disabled={loading}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 rounded-lg font-medium transition-colors"
+        >
+          {loading ? "Searching..." : "Search Students"}
+        </button>
+      </div>
+
       <SearchAndInput
         searchRef={searchRef}
         inputRef={inputRef}
@@ -327,7 +268,6 @@ export default function RfidAssignPage() {
         clearSearch={() => {
           setSearchTerm("");
           setSelectedStudent(null);
-          searchRef.current?.focus();
         }}
         selectFirstMatchingStudent={selectFirstMatchingStudent}
         rfid={rfid}
@@ -339,28 +279,35 @@ export default function RfidAssignPage() {
       {selectedStudent && (
         <SelectedStudentCard
           student={selectedStudent}
-          clear={() => {
-            setSelectedStudent(null);
-            inputRef.current?.focus();
-          }}
+          clear={() => setSelectedStudent(null)}
         />
       )}
 
-      <div className="max-w-6xl mx-auto mb-3">
-        <p className="text-sm text-gray-400">
-          Showing {filtered.length} of {students.length} students
-          {searchTerm && ` matching "${searchTerm}"`} | Double-click to select
-        </p>
-      </div>
-
       <StudentsTable
-        students={filtered}
+        students={students}
         selectedStudent={selectedStudent}
-        handleRowDoubleClick={handleRowDoubleClick}
+        handleRowDoubleClick={(s) => setSelectedStudent(s)}
         handleRemove={handleRemove}
         loading={loading}
         getUniqueId={getUniqueId}
       />
+
+      {status && (
+        <div
+          className={`fixed bottom-5 right-5 px-4 py-3 rounded-lg flex items-center gap-2 shadow-lg ${
+            status.type === "success"
+              ? "bg-green-800 text-green-100"
+              : status.type === "error"
+              ? "bg-red-800 text-red-100"
+              : "bg-yellow-800 text-yellow-100"
+          }`}
+        >
+          {status.type === "success" && <FaCheckCircle />}
+          {status.type === "error" && <FaTimes />}
+          {status.type === "warning" && <FaExclamationTriangle />}
+          <span>{status.msg}</span>
+        </div>
+      )}
     </div>
   );
 }
