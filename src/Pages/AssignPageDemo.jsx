@@ -1,3 +1,5 @@
+
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import { FaCheckCircle, FaExclamationTriangle, FaTimes } from "react-icons/fa";
 
@@ -7,29 +9,78 @@ import SelectedStudentCard from "../Components/Assign/SelectedStudentCard";
 import StudentsTable from "../Components/Assign/StudentsTable";
 import { getUniqueId } from "../utils/helpers";
 
-// ✅ Clean API URL — update this in production!
+// ✅ Clean API URL
 const BASE_URL = "https://your-backend-api.com/api";
 
-// Real fetch wrapper (no mock)
-const apiFetch = async (url, options = {}) => {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
+// 🧪 Updated mock to match real API structure
+const mockFetch = (url) =>
+  new Promise((resolve) => {
+    setTimeout(() => {
+      if (url.includes("/classes")) {
+        resolve({
+          ok: true,
+          json: () => Promise.resolve([
+            { id: 1, name: "Class V" },
+            { id: 2, name: "Class VI" },
+            { id: 3, name: "Class VII" }
+          ])
+        });
+      } else if (url.includes("/sections")) {
+        resolve({
+          ok: true,
+          json: () => Promise.resolve([
+            { id: 1, name: "A", class_id: 1 },
+            { id: 2, name: "B", class_id: 1 },
+            { id: 3, name: "C", class_id: 2 }
+          ])
+        });
+      } else if (url.includes("/sessions")) {
+        resolve({
+          ok: true,
+          json: () => Promise.resolve([
+            { id: 1, name: "2024–2025" },
+            { id: 2, name: "2025–2026" }
+          ])
+        });
+      } else if (url.includes("/students")) {
+        const urlObj = new URL(url, "http://mock");
+        const className = urlObj.searchParams.get("class");
+        const sectionName = urlObj.searchParams.get("section");
+        const sessionName = urlObj.searchParams.get("session");
+
+        const MOCK_STUDENTS = [
+          { id: 1, name: "Alice Johnson", roll: "01", adm: "ADM1001", class: className, section: sectionName, session: sessionName, rfid: "123456" },
+          { id: 2, name: "Bob Smith", roll: "02", adm: "ADM1002", class: className, section: sectionName, session: sessionName, rfid: null },
+          { id: 3, name: "Charlie Brown", roll: "03", adm: "ADM1003", class: className, section: sectionName, session: sessionName, rfid: null },
+          { id: 4, name: "Diana Prince", roll: "04", adm: "ADM1004", class: className, section: sectionName, session: sessionName, rfid: "789012" },
+          { id: 5, name: "Ethan Hunt", roll: "05", adm: "ADM1005", class: className, section: sectionName, session: sessionName, rfid: null },
+        ];
+
+        resolve({ ok: true, json: () => Promise.resolve(MOCK_STUDENTS) });
+      } else {
+        resolve({ ok: false });
+      }
+    }, 300);
   });
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+
+const apiFetch = async (url, options = {}) => {
+  try {
+    const res = await fetch(url, options);
+    if (!res.ok) throw new Error();
+    return res;
+  } catch {
+    console.warn("⚠️ Using mock data for:", url);
+    return mockFetch(url);
   }
-  return res;
 };
 
-export default function AssignPage() {
+export default function AssignPageDemo() {
+  // Store full objects
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
   const [sessions, setSessions] = useState([]);
 
+  // Selections store NAME (for API compatibility)
   const [classSel, setClassSel] = useState("");
   const [sectionSel, setSectionSel] = useState("");
   const [sessionSel, setSessionSel] = useState("");
@@ -42,8 +93,10 @@ export default function AssignPage() {
   const [status, setStatus] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
 
+  const searchRef = useRef(null);
   const inputRef = useRef(null);
   const nextUnassignedIndexRef = useRef(0);
+  const assignedRfidSetRef = useRef(new Set());
 
   // Fetch dropdowns on mount
   useEffect(() => {
@@ -67,6 +120,15 @@ export default function AssignPage() {
     fetchDropdowns();
   }, []);
 
+  // Keep global RFID set in sync
+  useEffect(() => {
+    const assigned = new Set();
+    rawStudents.forEach(s => {
+      if (s.rfid) assigned.add(s.rfid);
+    });
+    assignedRfidSetRef.current = assigned;
+  }, [rawStudents]);
+
   // Auto-focus RFID input after students load
   useEffect(() => {
     if (rawStudents.length > 0) {
@@ -75,7 +137,7 @@ export default function AssignPage() {
     }
   }, [rawStudents]);
 
-  // Reset assignment pointer when filters or list changes
+  // Reset pointers when filters or list changes
   useEffect(() => {
     nextUnassignedIndexRef.current = 0;
   }, [classSel, sectionSel, sessionSel, filter, rawStudents]);
@@ -91,9 +153,10 @@ export default function AssignPage() {
 
   const showStatus = useCallback((msg, type) => {
     setStatus({ msg, type });
-    setTimeout(() => setStatus(null), 2500);
+    setTimeout(() => setStatus(null), 2000);
   }, []);
 
+  // 🔍 Manual search trigger
   const handleSearch = async () => {
     if (!classSel || !sectionSel || !sessionSel) {
       showStatus("Please select class, section, and session", "error");
@@ -106,8 +169,10 @@ export default function AssignPage() {
   const fetchStudents = async (className, sectionName, sessionName) => {
     setLoading(true);
     try {
+      // ✅ Pass NAMES (as your backend expects)
       const url = `${BASE_URL}/students?class=${encodeURIComponent(className)}&section=${encodeURIComponent(sectionName)}&session=${encodeURIComponent(sessionName)}`;
       const res = await apiFetch(url);
+      if (!res.ok) throw new Error("Failed to fetch students");
       const data = await res.json();
       setRawStudents(data);
       setSelectedStudent(null);
@@ -119,12 +184,20 @@ export default function AssignPage() {
     }
   };
 
-  // 🔁 Assign RFID with backend confirmation
-  const assignRfid = useCallback(async () => {
+  // 🔁 Auto-assign with duplicate prevention
+  const assignRfid = useCallback(() => {
     const rfidValue = rfid.trim();
     if (!rfidValue) return;
 
+    if (assignedRfidSetRef.current.has(rfidValue)) {
+      showStatus("This RFID is already assigned!", "error");
+      setRfid("");
+      setTimeout(() => inputRef.current?.focus(), 50);
+      return;
+    }
+
     const unassignedStudents = students.filter(s => !s.rfid);
+
     if (unassignedStudents.length === 0) {
       showStatus("No unassigned students left", "error");
       setRfid("");
@@ -134,36 +207,18 @@ export default function AssignPage() {
     const currentIndex = nextUnassignedIndexRef.current % unassignedStudents.length;
     const studentToAssign = unassignedStudents[currentIndex];
 
-    // Optimistically update UI
     setRawStudents(prev =>
-      prev.map(s => (s.id === studentToAssign.id ? { ...s, rfid: rfidValue } : s))
+      prev.map(s =>
+        s.id === studentToAssign.id ? { ...s, rfid: rfidValue } : s
+      )
     );
+
+    showStatus(`✅ Assigned to ${studentToAssign.name}`, "success");
     setRfid("");
     nextUnassignedIndexRef.current = currentIndex + 1;
-
-    // Sync with backend
-    try {
-      await apiFetch(`${BASE_URL}/assignments/`, {
-        method: "POST",
-        body: JSON.stringify({
-          user_id: studentToAssign.id,
-          card: rfidValue,
-        }),
-      });
-      showStatus(`✅ Assigned to ${studentToAssign.name}`, "success");
-    } catch (error) {
-      // Revert on failure
-      setRawStudents(prev =>
-        prev.map(s => (s.id === studentToAssign.id ? { ...s, rfid: null } : s))
-      );
-      showStatus("Assignment failed – reverted", "error");
-    }
-
-    // Refocus input
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [rfid, students, showStatus]);
 
-  // Auto-trigger assign after 300ms of typing
   useEffect(() => {
     if (rfid.trim()) {
       const timeout = setTimeout(assignRfid, 300);
@@ -188,33 +243,19 @@ export default function AssignPage() {
     }
   };
 
-  const handleRemove = async (student) => {
-    // Optimistically remove
+  const handleRemove = (student) => {
     setRawStudents(prev =>
       prev.map(s => (s.id === student.id ? { ...s, rfid: null } : s))
     );
     showStatus("RFID removed", "warning");
     nextUnassignedIndexRef.current = 0;
-
-    // Sync removal with backend
-    try {
-      await apiFetch(`${BASE_URL}/remove-rfid/${student.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ rfid: null }),
-      });
-    } catch (error) {
-      // Revert on error
-      setRawStudents(prev =>
-        prev.map(s => (s.id === student.id ? { ...s, rfid: student.rfid } : s))
-      );
-      showStatus("Removal failed – reverted", "error");
-    }
   };
 
   return (
     <div className="p-6 text-gray-100 bg-gray-900 min-h-screen">
       <h2 className="text-2xl font-semibold mb-4">RFID Assignment</h2>
 
+      {/* Pass .name arrays to FiltersBar */}
       <FiltersBar
         classes={classes.map(c => c.name)}
         sections={sections.map(s => s.name)}
@@ -240,6 +281,7 @@ export default function AssignPage() {
       </div>
 
       <SearchAndInput
+        searchRef={searchRef}
         inputRef={inputRef}
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}

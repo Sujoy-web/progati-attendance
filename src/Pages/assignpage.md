@@ -1,44 +1,40 @@
-Qwen3-Max
-5:36 pm
-RFID Assignment Page – README
-📌 Overview
-The RFID Assignment Page is a React-based frontend interface designed for school or institutional administrators to efficiently assign unique RFID cards to students. The workflow is optimized for bulk scanning: once a class, section, and academic session are selected, the user clicks "Search Students" to load the relevant student list. The RFID input field is automatically focused, enabling seamless card scanning. Each scanned RFID is automatically assigned to the next unassigned student in serial order (by roll number). The system prevents duplicate assignments—if an RFID is already in use, the scan is rejected with an error. Manual overrides (search, selection, removal) are also supported for flexibility.
+##  How the Page Works
+On load, the page fetches all classes, sections, and sessions to populate the filters. The admin selects a class, section, and session, then clicks “Search Students” to load the student list. RFIDs can be scanned or entered to automatically assign them to the next unassigned student, with duplicates prevented. Assigned RFIDs are stored in state and can be saved to the backend. Clicking “Remove” clears a student’s RFID without deleting their record. The search box allows quick highlighting by name, roll, or admission number.
 
-🔌 API Endpoints & Required JSON Formats
-The frontend communicates with a backend API at https://your-backend-api.com/api. All endpoints must support CORS and return appropriate HTTP status codes.
-
-1. GET /classes
-Purpose: Fetch list of available classes.
-Response (200 OK):
 ```
-"Class V", "Class VI", "Class VII"
-```
-2. GET /sections
-Purpose: Fetch list of available sections.
-Response (200 OK):
-json
-```
-["A", "B", "C"]
-```
-3. GET /sessions
-Purpose: Fetch list of academic sessions.
-Response (200 OK):
-json
-
-
-1
-["2024–2025", "2025–2026"]
-4. GET /students?class={name}&section={name}&session={name}
-Purpose: Fetch students filtered by class, section, and session.
-Query Parameters:
-class (string, required)
-section (string, required)
-session (string, required)
-Response (200 OK):
-json
-
+ GET /api/classes
+ Purpose: Return list of classes
+ Response (200 OK):
 
 [
+  { "id": 1, "name": "Class V" },
+  { "id": 2, "name": "Class VI" }
+]
+```
+## 2. GET /api/sections
+Purpose: Return all sections (used for filtering; frontend uses section name, not ID)
+Response (200 OK):
+```
+[
+  { "id": 1, "name": "A", "class_id": 1 },
+  { "id": 2, "name": "B", "class_id": 1 }
+]
+```
+ 🔹 Note: Frontend does not filter sections by class — it just shows all section names. So section names should be unique across the system (e.g., no two "A" sections in different classes), or your /students endpoint must correctly handle class+section combo. 
+
+ ## 3. GET /api/sessions
+ Purpose: Return academic sessions
+Response (200 OK):
+```
+[
+  { "id": 1, "name": "2024–2025" },
+  { "id": 2, "name": "2025–2026" }
+]
+```
+## 4. GET /api/students?class=Class%20V&section=A&session=2024%E2%80%932025
+Purpose: Fetch students by class name, section name, and session name (all as URL-encoded strings)
+Response (200 OK):
+```[
   {
     "id": 1,
     "name": "Alice Johnson",
@@ -60,76 +56,40 @@ json
     "rfid": null
   }
 ]
-Note: rfid is a string if assigned, or null if unassigned. 
+```
+ ✅ Must include all 8 fields: id, name, roll, adm, class, section, session, rfid .
+✅ rfid = string (if assigned) or null (if not)
+✅ class, section, session = strings (names), not IDs 
 
-5. POST /assignments/
-Purpose: Assign an RFID card to a student.
+## 5. POST /api/assignments/
+Purpose: Assign RFID to a student
 Request Body:
-json
-
-
-1
-2
-3
-4
-⌄
-{
+```{
   "user_id": 2,
   "card": "987654"
 }
-user_id: integer (student ID from /students response)
-card: string or integer (RFID value — frontend sends as string)
-Success Response (201 Created):
-json
-
-
-1
-{ "id": 101, "user_id": 2, "card": "987654", "created_at": "2024-06-01T10:00:00Z" }
-Error Response (400/409):
-json
-
-
-1
-{ "detail": "RFID already assigned" }
-6. GET /assignments/user/{user_id}
-Purpose: Retrieve assignment(s) for a specific student (used before deletion).
-Response (200 OK):
-json
-
-
-1
-2
-3
-⌄
-[
-  { "id": 101, "user_id": 2, "card": "987654", "created_at": "2024-06-01T10:00:00Z" }
-]
-7. DELETE /assignments/{assignment_id}
-Purpose: Remove an RFID assignment from a student.
-Success Response (200 OK):
-json
-
-
-1
-{ "message": "Assignment deleted" }
-🧩 Frontend Requirements Summary
-Initial Load
-Fetch
-/classes
-,
-/sections
-,
-/sessions
-Student Load
-Only after user selects all 3 filters + clicks
-Search
-Auto-Assign
-On RFID input (debounced), assign to next unassigned student
-Duplicate Guard
-Block assignment if RFID already exists in current student list
-Manual Actions
-Search by name/roll/adm, double-click to select, remove RFID
-Error Handling
-Show toast for network errors, validation failures
-
-💡 Note: The frontend currently uses client-side filtering for "Assigned"/"Unassigned" views. For large datasets, consider moving this to the backend. 
+Success (201 Created):
+{
+  "id": 101,
+  "user_id": 2,
+  "card": "987654",
+  "created_at": "2024-06-01T10:00:00Z"
+}
+Error (409 Conflict or 400 Bad Request):
+{
+  "detail": "RFID already assigned"
+}
+```
+## 6. PUT /api/remove-rfid/{student_id}
+Purpose: Remove RFID from a student
+Request Body:
+```{
+  "rfid": null
+}
+Success (200 OK):
+{
+  "success": true,
+  "message": "RFID removed successfully",
+  "student_id": 2
+}
+```
