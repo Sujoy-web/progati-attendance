@@ -1,3 +1,4 @@
+// src/pages/AssignPage.jsx
 import { useState, useEffect, useRef, useCallback } from "react";
 import { FaCheckCircle, FaExclamationTriangle, FaTimes } from "react-icons/fa";
 
@@ -7,25 +8,10 @@ import SelectedStudentCard from "../Components/Assign/SelectedStudentCard";
 import StudentsTable from "../Components/Assign/StudentsTable";
 import { getUniqueId } from "../utils/helpers";
 
-// ✅ Clean API URL — update this in production!
-const BASE_URL = "https://your-backend-api.com/api";
+// ✅ Update this to your real backend URL in production
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://your-backend-api.com/api";
 
-// Real fetch wrapper (no mock)
-const apiFetch = async (url, options = {}) => {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-  });
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-  }
-  return res;
-};
-
-export default function AssignPage() {
+export default function AssignPage({ token }) {
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
   const [sessions, setSessions] = useState([]);
@@ -45,16 +31,39 @@ export default function AssignPage() {
   const inputRef = useRef(null);
   const nextUnassignedIndexRef = useRef(0);
 
+  // 🔐 Auth-aware fetch wrapper — includes Bearer token
+  const apiFetch = useCallback(async (url, options = {}) => {
+    const headers = {
+      "Content-Type": "application/json",
+      ...options.headers,
+    };
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(url, {
+      ...options,
+      headers,
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res;
+  }, [token]);
+
   // Fetch dropdowns on mount
   useEffect(() => {
     const fetchDropdowns = async () => {
+      
       try {
         const [classRes, sectionRes, sessionRes] = await Promise.all([
           apiFetch(`${BASE_URL}/classes`),
           apiFetch(`${BASE_URL}/sections`),
           apiFetch(`${BASE_URL}/sessions`),
         ]);
-
+console.log("fetching dropdowns", classRes, sectionRes, sessionRes)
         setClasses(await classRes.json());
         setSections(await sectionRes.json());
         setSessions(await sessionRes.json());
@@ -65,7 +74,7 @@ export default function AssignPage() {
     };
 
     fetchDropdowns();
-  }, []);
+  }, [apiFetch]);
 
   // Auto-focus RFID input after students load
   useEffect(() => {
@@ -108,6 +117,7 @@ export default function AssignPage() {
     try {
       const url = `${BASE_URL}/students?class=${encodeURIComponent(className)}&section=${encodeURIComponent(sectionName)}&session=${encodeURIComponent(sessionName)}`;
       const res = await apiFetch(url);
+      console.log("fetch student response", res)
       const data = await res.json();
       setRawStudents(data);
       setSelectedStudent(null);
@@ -143,12 +153,13 @@ export default function AssignPage() {
 
     // Sync with backend
     try {
-      await apiFetch(`${BASE_URL}/assignments/`, {
-        method: "POST",
-        body: JSON.stringify({
+      const payload = {
           user_id: studentToAssign.id,
           card: rfidValue,
-        }),
+        }
+      await apiFetch(`${BASE_URL}/assignments/`, {
+        method: "POST",
+        body: JSON.stringify(payload),
       });
       showStatus(`✅ Assigned to ${studentToAssign.name}`, "success");
     } catch (error) {
@@ -157,11 +168,12 @@ export default function AssignPage() {
         prev.map(s => (s.id === studentToAssign.id ? { ...s, rfid: null } : s))
       );
       showStatus("Assignment failed – reverted", "error");
+       console.log(error)
     }
 
     // Refocus input
     setTimeout(() => inputRef.current?.focus(), 50);
-  }, [rfid, students, showStatus]);
+  }, [rfid, students, showStatus, apiFetch]);
 
   // Auto-trigger assign after 300ms of typing
   useEffect(() => {
@@ -208,6 +220,7 @@ export default function AssignPage() {
         prev.map(s => (s.id === student.id ? { ...s, rfid: student.rfid } : s))
       );
       showStatus("Removal failed – reverted", "error");
+      console.log(error)
     }
   };
 

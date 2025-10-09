@@ -1,6 +1,7 @@
 // Pages/TimeSetupPage.jsx
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+
+import { fetchClasses as fetchClassesFromAPI, fetchClassesMock } from '../services/classService';
 
 export default function TimeSetupPage() {
   const [setups, setSetups] = useState([]);
@@ -12,8 +13,8 @@ export default function TimeSetupPage() {
   const [loadingClasses, setLoadingClasses] = useState(false); // Track loading state for classes
   const [filterDate, setFilterDate] = useState(''); // Track the selected date for filtering
 
-  // State for classes fetched from API
-  const [classOptions, setClassOptions] = useState([]);
+  // State for classes fetched from API - stored in format { id: 1, name: "Class V" }
+  const [classes, setClasses] = useState([]);
 
   // Weekdays for schedule table
   const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -44,21 +45,16 @@ export default function TimeSetupPage() {
   const fetchClasses = async () => {
     setLoadingClasses(true);
     try {
-      // In a real application, this would be your actual API call
-      // const response = await fetch('/api/classes');
-      // const data = await response.json();
-      // setClassOptions(data);
-
-      // For now, using mock data, replace this with your actual API call
-      const mockClasses = [
-        { value: 'class-I', label: 'I' },
-        { value: 'class-II', label: 'II' },
-        { value: 'class-III', label: 'III' },
-        { value: 'class-IV', label: 'IV' },
-        { value: 'class-V', label: 'V' }
-      ];
-      
-      setClassOptions(mockClasses);
+      // Try to fetch from backend API first
+      try {
+        const classesFromAPI = await fetchClassesFromAPI();
+        setClasses(classesFromAPI);
+      } catch (apiError) {
+        console.warn('Failed to fetch classes from API, using mock data:', apiError);
+        // Fallback to mock data
+        const mockClasses = await fetchClassesMock();
+        setClasses(mockClasses);
+      }
     } catch (error) {
       console.error('Error fetching classes:', error);
       // Handle error appropriately
@@ -71,7 +67,7 @@ export default function TimeSetupPage() {
     const newSetup = {
       id: Date.now(), // Unique ID for the setup
       name: `Setup ${counter}`,
-      selectedClasses: [], // Changed to an array for multiple classes
+      selectedClassIds: [], // Changed to an array for multiple class IDs
       startDate: '',
       endDate: '',
       isEditingName: false,
@@ -109,7 +105,7 @@ export default function TimeSetupPage() {
     setSetups(setups.map(setup => {
       if (setup.id === id) {
         // Basic validation
-        if (setup.selectedClasses.length === 0 || !setup.startDate || !setup.endDate) {
+        if (setup.selectedClassIds.length === 0 || !setup.startDate || !setup.endDate) {
           alert('Please select at least one class and fill in all fields for this setup');
           return setup;
         }
@@ -129,7 +125,7 @@ export default function TimeSetupPage() {
       //   },
       //   body: JSON.stringify({
       //     id,
-      //     selectedClasses: setups.find(s => s.id === id).selectedClasses,
+      //     selectedClassIds: setups.find(s => s.id === id).selectedClassIds,
       //     startDate: setups.find(s => s.id === id).startDate,
       //     endDate: setups.find(s => s.id === id).endDate
       //   }),
@@ -174,21 +170,21 @@ export default function TimeSetupPage() {
   };
 
   // Handle class selection for a specific setup
-  const handleClassSelection = (setupId, classValue) => {
+  const handleClassSelection = (setupId, classId) => {
     setSetups(setups.map(setup => {
       if (setup.id === setupId) {
-        const isSelected = setup.selectedClasses.includes(classValue);
+        const isSelected = setup.selectedClassIds.includes(classId);
         if (isSelected) {
           // Remove the class if already selected
           return {
             ...setup,
-            selectedClasses: setup.selectedClasses.filter(c => c !== classValue)
+            selectedClassIds: setup.selectedClassIds.filter(id => id !== classId)
           };
         } else {
           // Add the class if not selected
           return {
             ...setup,
-            selectedClasses: [...setup.selectedClasses, classValue]
+            selectedClassIds: [...setup.selectedClassIds, classId]
           };
         }
       }
@@ -444,10 +440,10 @@ export default function TimeSetupPage() {
 
   // Determine available classes for a specific setup
   const getAvailableClassesForSetup = (currentSetupId) => {
-    const allSelectedClasses = setups
+    const allSelectedClassIds = setups
       .filter(setup => setup.id !== currentSetupId)
-      .flatMap(setup => setup.selectedClasses);
-    return classOptions.filter(option => !allSelectedClasses.includes(option.value));
+      .flatMap(setup => setup.selectedClassIds);
+    return classes.filter(cls => !allSelectedClassIds.includes(cls.id));
   };
 
   // Toggle the dropdown for a specific setup
@@ -632,16 +628,16 @@ export default function TimeSetupPage() {
     setups
       .filter(setup => setup.showMainScheduleTable) // Only include setups that have preview schedules
       .forEach(setup => {
-        const classLabels = setup.selectedClasses.map(value => {
-          const classOption = classOptions.find(opt => opt.value === value);
-          return classOption ? classOption.label : '';
+        const classNames = setup.selectedClassIds.map(classId => {
+          const classObj = classes.find(cls => cls.id === classId);
+          return classObj ? classObj.name : '';
         }).join(', ');
 
         printContent += `
           <div class="setup">
             <div class="setup-header">
               <h2>${setup.name}</h2>
-              <p><strong>Classes:</strong> ${classLabels}</p>
+              <p><strong>Classes:</strong> ${classNames}</p>
               <p><strong>Period:</strong> ${setup.startDate} to ${setup.endDate}</p>
             </div>
             <table>
@@ -811,10 +807,10 @@ export default function TimeSetupPage() {
                           onClick={() => toggleDropdown(setup.id)}
                         >
                           <span>
-                            {setup.selectedClasses.length > 0 
-                              ? setup.selectedClasses.map(value => {
-                                  const classOption = classOptions.find(opt => opt.value === value);
-                                  return classOption ? classOption.label : '';
+                            {setup.selectedClassIds.length > 0 
+                              ? setup.selectedClassIds.map(classId => {
+                                  const classObj = classes.find(cls => cls.id === classId);
+                                  return classObj ? classObj.name : '';
                                 }).join(', ')
                               : "Choose classes"}
                           </span>
@@ -837,50 +833,50 @@ export default function TimeSetupPage() {
                               left: `${dropdownPosition.left}px`,
                               width: `${dropdownPosition.width}px`
                             }}>
-                            {availableClasses.map(option => {
-                              const isSelected = setup.selectedClasses.includes(option.value);
+                            {availableClasses.map(cls => {
+                              const isSelected = setup.selectedClassIds.includes(cls.id);
                               
                               return (
                                 <div 
-                                  key={option.value} 
+                                  key={cls.id} 
                                   className="flex items-center p-2 hover:bg-gray-500"
                                 >
                                   <input
                                     type="checkbox"
-                                    id={`class-${setup.id}-${option.value}`}
+                                    id={`class-${setup.id}-${cls.id}`}
                                     checked={isSelected}
-                                    onChange={() => handleClassSelection(setup.id, option.value)}
+                                    onChange={() => handleClassSelection(setup.id, cls.id)}
                                     className="mr-2 h-4 w-4 text-blue-600 bg-gray-700 border-gray-500 rounded focus:ring-blue-500"
                                   />
                                   <label 
-                                    htmlFor={`class-${setup.id}-${option.value}`}
+                                    htmlFor={`class-${setup.id}-${cls.id}`}
                                     className="text-sm text-white flex-1"
                                   >
-                                    {option.label}
+                                    {cls.name}
                                   </label>
                                 </div>
                               );
                             })}
                             {/* Show already selected classes in other setups as disabled */}
-                            {classOptions
-                              .filter(option => !availableClasses.some(avail => avail.value === option.value))
-                              .map(option => (
+                            {classes
+                              .filter(cls => !availableClasses.some(available => available.id === cls.id))
+                              .map(cls => (
                                 <div 
-                                  key={option.value} 
+                                  key={cls.id} 
                                   className="flex items-center p-2 text-gray-400"
                                 >
                                   <input
                                     type="checkbox"
-                                    id={`class-${setup.id}-${option.value}-disabled`}
+                                    id={`class-${setup.id}-${cls.id}-disabled`}
                                     checked={false}
                                     disabled
                                     className="mr-2 h-4 w-4 text-gray-400 bg-gray-700 border-gray-500 rounded"
                                   />
                                   <label 
-                                    htmlFor={`class-${setup.id}-${option.value}-disabled`}
+                                    htmlFor={`class-${setup.id}-${cls.id}-disabled`}
                                     className="text-sm text-gray-400 flex-1"
                                   >
-                                    {option.label} (Selected)
+                                    {cls.name} (Selected)
                                   </label>
                                 </div>
                               ))
@@ -1004,9 +1000,9 @@ export default function TimeSetupPage() {
                       <div className="mt-8 bg-gray-700 p-4 rounded-lg">
                         <div className="flex justify-between items-center mb-4">
                           <h3 className="text-lg font-semibold text-white">
-                            Preview Schedule for Classes: {setup.selectedClasses.map(value => {
-                              const classOption = classOptions.find(opt => opt.value === value);
-                              return classOption ? classOption.label : '';
+                            Preview Schedule for Classes: {setup.selectedClassIds.map(classId => {
+                              const classObj = classes.find(cls => cls.id === classId);
+                              return classObj ? classObj.name : '';
                             }).join(', ')}
                           </h3>
                           <div className="flex items-center">
@@ -1073,6 +1069,7 @@ export default function TimeSetupPage() {
                                   <td className="py-2 px-4 border border-gray-500">
                                     <input
                                       type="time"
+                               
                                       value={dateItem.outTime}
                                       onChange={(e) => updatePreviewScheduleData(setup.id, dateItem.identifier || dateItem.date, 'outTime', e.target.value)}
                                       disabled={dateItem.isOffDay}
@@ -1091,22 +1088,22 @@ export default function TimeSetupPage() {
                                     {dateItem.isDuplicate ? (
                                       <div className="text-blue-300 font-medium">
                                         {(() => {
-                                          const classOption = classOptions.find(opt => opt.value === dateItem.class);
-                                          return classOption ? classOption.label : dateItem.class;
+                                          const classObj = classes.find(cls => cls.id === dateItem.class);
+                                          return classObj ? classObj.name : dateItem.class;
                                         })()}
                                       </div>
                                     ) : (
                                       <select
                                         className="w-full p-1 rounded bg-gray-700 border border-gray-500 text-white text-sm"
-                                        onChange={(e) => duplicateDateForClass(setup.id, dateItem, e.target.value)}
+                                        onChange={(e) => duplicateDateForClass(setup.id, dateItem, parseInt(e.target.value))}
                                         value=""
                                       >
                                         <option value="">Select Class</option>
-                                        {setup.selectedClasses.map(value => {
-                                          const classOption = classOptions.find(opt => opt.value === value);
+                                        {setup.selectedClassIds.map(classId => {
+                                          const classObj = classes.find(cls => cls.id === classId);
                                           return (
-                                            <option key={value} value={value}>
-                                              {classOption ? classOption.label : ''}
+                                            <option key={classId} value={classId}>
+                                              {classObj ? classObj.name : ''}
                                             </option>
                                           );
                                         })}

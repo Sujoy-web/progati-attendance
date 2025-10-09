@@ -1,17 +1,28 @@
+
+
+import { useRef, useImperativeHandle, forwardRef } from "react";
 import { FaSearch, FaTimes } from "react-icons/fa";
 
-export default function SearchAndInput({ 
-  searchRef, inputRef, searchTerm, setSearchTerm, 
+const SearchAndInput = forwardRef(({ 
+  inputRef, searchTerm, setSearchTerm, 
   clearSearch, selectFirstMatchingStudent, 
   rfid, setRfid, assignRfid, loading 
-}) {
+}, ref) => {
+  const searchInputRef = useRef(null);
+
+  // Expose search input ref to parent if needed
+  useImperativeHandle(ref, () => ({
+    searchInputRef: searchInputRef.current,
+    rfidInputRef: inputRef.current
+  }));
+
   return (
     <div className="max-w-6xl mx-auto mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
       <div className="md:col-span-2 relative">
         <div className="relative flex items-center">
           <FaSearch className="absolute left-3 text-gray-400" />
           <input
-            ref={searchRef}
+            ref={searchInputRef}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && selectFirstMatchingStudent()}
@@ -44,4 +55,6 @@ export default function SearchAndInput({
       </div>
     </div>
   );
-}
+});
+
+export default SearchAndInput;

@@ -4,23 +4,59 @@ import React, { useState, useEffect } from "react";
 // Define API base URL directly in this file
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
 
+// Get token from session storage
+const getAccessToken = () => {
+  return sessionStorage.getItem("accessToken");
+};
+
+// 🔐 Auth-aware fetch wrapper — includes Bearer token from sessionStorage
+const apiFetch = async (url, options = {}) => {
+  const token = getAccessToken();
+  
+  if (!token) {
+    throw new Error("No access token found. Please log in again.");
+  }
+
+  const headers = {
+    "Content-Type": "application/json",
+    ...options.headers,
+  };
+
+  headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  // If token is expired (401), we might need to refresh it
+  if (res.status === 401) {
+    console.warn("Unauthorized access - token may be expired");
+    throw new Error("Session expired. Please log in again.");
+  }
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  }
+  return res;
+};
+
 // --- Inline API Functions ---
 const fetchSessions = async () => {
-  const response = await fetch(`${API_BASE_URL}/sessions`);
+  const response = await apiFetch(`${API_BASE_URL}/sessions`);
   if (!response.ok) throw new Error('Failed to fetch sessions');
   return response.json();
 };
 
 const fetchHolidays = async () => {
-  const response = await fetch(`${API_BASE_URL}/holidays`);
+  const response = await apiFetch(`${API_BASE_URL}/holidays`);
   if (!response.ok) throw new Error('Failed to fetch holidays');
   return response.json();
 };
 
 const createHoliday = async (holidayData) => {
-  const response = await fetch(`${API_BASE_URL}/holidays`, {
+  const response = await apiFetch(`${API_BASE_URL}/holidays`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(holidayData),
   });
   if (!response.ok) throw new Error('Failed to create holiday');
@@ -28,9 +64,8 @@ const createHoliday = async (holidayData) => {
 };
 
 const updateHoliday = async (id, holidayData) => {
-  const response = await fetch(`${API_BASE_URL}/holidays/${id}`, {
+  const response = await apiFetch(`${API_BASE_URL}/holidays/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(holidayData),
   });
   if (!response.ok) throw new Error('Failed to update holiday');
@@ -38,15 +73,14 @@ const updateHoliday = async (id, holidayData) => {
 };
 
 const deleteHoliday = async (id) => {
-  const response = await fetch(`${API_BASE_URL}/holidays/${id}`, { method: 'DELETE' });
+  const response = await apiFetch(`${API_BASE_URL}/holidays/${id}`, { method: 'DELETE' });
   if (!response.ok) throw new Error('Failed to delete holiday');
   return true;
 };
 
 const toggleHolidayStatus = async (id) => {
-  const response = await fetch(`${API_BASE_URL}/holidays/${id}/toggle-status`, {
+  const response = await apiFetch(`${API_BASE_URL}/holidays/${id}/toggle-status`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
   });
   if (!response.ok) throw new Error('Failed to toggle holiday status');
   return response.json();
