@@ -8,7 +8,7 @@ export default function Sidebar() {
     { path: "/assign", label: "RFID Assignment", icon: <FaIdCard /> },
         { path: "/yearplanner", label: "Year Planner", icon: <FaIdCard /> },
         { path: "/timesetup", label: "Time Setup", icon: <FaClock /> },
-         { path: "/attendance", label: "RFID ATTENDANCE", icon: <FaClock /> },
+         { path: "/mattendance", label: "RFID ATTENDANCE", icon: <FaClock /> },
     
   ];
 

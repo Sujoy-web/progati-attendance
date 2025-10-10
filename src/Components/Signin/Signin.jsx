@@ -62,22 +62,22 @@ const handleSignin = async (e) => {
       return;
     }
 
-    // --- Store access token temporarily ---
-    setAccessToken(data.accessToken);
-    sessionStorage.setItem("accessToken", data.accessToken);
-    console.log("Access Token stored:", data.accessToken);
+    // --- Store access token from backend response ---
+    setAccessToken(data.access_token);
+    localStorage.setItem("authToken", data.access_token);
+    console.log("Access Token stored in localStorage:", data.access_token);
     
     // --- Store refresh token if provided in response ---
-    if (data.refreshToken) {
-      sessionStorage.setItem("refreshToken", data.refreshToken);
-      console.log("Refresh Token stored");
+    if (data.refresh_token) {
+      localStorage.setItem("refreshToken", data.refresh_token);
+      console.log("Refresh Token stored in localStorage");
     }
 
     // --- Optional callback ---
     if (onSigninComplete) onSigninComplete(data.user);
 
     // --- Navigate on success ---
-    navigate("/attendance");
+    navigate("/mattendance");
   } catch (err) {
     console.error("Sign-in error:", err);
     setError("Unable to connect to server. Please try again.");
@@ -88,7 +88,7 @@ const handleSignin = async (e) => {
 
   // ✅ Example of making secure API calls with Bearer header
   const fetchProtectedData = async () => {
-    const token = sessionStorage.getItem("accessToken");
+    const token = localStorage.getItem("authToken");
     if (!token) {
       console.warn("No access token found — please log in again.");
       return;
@@ -126,7 +126,7 @@ const handleSignin = async (e) => {
 
       if (refreshRes.ok) {
         const { accessToken: newToken } = await refreshRes.json();
-        sessionStorage.setItem("accessToken", newToken);
+        localStorage.setItem("authToken", newToken);
         setAccessToken(newToken);
         console.log("🔄 Access token refreshed successfully!");
       } else {

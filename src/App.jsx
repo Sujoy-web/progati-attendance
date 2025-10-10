@@ -4,14 +4,15 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import AppLayout from "./Layout/AppLayout";
 import AssignPage from "./Pages/AssignPage";
 import YearPlannerPage from "./Pages/YearPlannerPage";
-import TimeSetupPage from "./Pages/TimeSetupPage";
+// import TimeSetupPage from "./Pages/TimeSetupPage";
 
 import Signin from "./Components/Signin/Signin";
 import CardSignin from "./Components/Signin/CardSignin";
 import RfidAttendancePage from "./Pages/RfidAttendancePage";
-import AssignPageDemo from "./Pages/AssignPageDemo";
+
 import YearPlannerDemo from "./Pages/YearPlannerDemo";
 import ManualAttendance from "./Pages/ManualAttendance";
+import RfidAttendancePageDemo from "./Pages/AttendanceDemo";
 
 function App() {
   return (
@@ -27,12 +28,13 @@ function App() {
           {/* Protected routes with layout */}
           <Route element={<AppLayout />}>
             <Route path="/assign" element={<AssignPage />} />
-            <Route path="/assignDemo" element={<AssignPageDemo />} />
+        
             <Route path="/yearplanner" element={<YearPlannerPage />} />
             <Route path="/yearplannerDemo" element={<YearPlannerDemo />} />
-            <Route path="/timesetup" element={<TimeSetupPage />} />
+            {/* <Route path="/timesetup" element={<TimeSetupPage />} /> */}
 
             <Route path="/attendance" element={<RfidAttendancePage />} />
+                <Route path="/attendanceDemo" element={<RfidAttendancePageDemo />} />
           </Route>
         </Routes>
       </Router>
