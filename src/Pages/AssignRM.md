@@ -8,15 +8,11 @@ import SelectedStudentCard from "../Components/Assign/SelectedStudentCard";
 import StudentsTable from "../Components/Assign/StudentsTable";
 import { getUniqueId } from "../utils/helpers";
 
-// ✅ Use VITE env only (no localhost fallback)
-const BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "";
+// Use VITE env or fallback (remove trailing space!)
+const BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:3000/api";
 
 // Simple fetch wrapper with auth
 const makeApiRequest = async (url, options = {}) => {
-  if (!BASE_URL) {
-    throw new Error("API base URL not configured");
-  }
-
   const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
   
   const config = {
@@ -34,8 +30,6 @@ const makeApiRequest = async (url, options = {}) => {
   const timeoutId = setTimeout(() => controller.abort(), 10000);
   
   try {
-    console.log('🔍 API Request:', { url: fullUrl, method: config.method });
-    
     const response = await fetch(fullUrl, {
       ...config,
       signal: controller.signal,
@@ -48,17 +42,13 @@ const makeApiRequest = async (url, options = {}) => {
       console.warn('401 Unauthorized - removing tokens');
       localStorage.removeItem('authToken');
       sessionStorage.removeItem('authToken');
-      throw new Error('Authentication failed');
     }
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ API Error:', { status: response.status, statusText: response.statusText, errorText });
-      throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log('✅ API Response:', data);
     return { data, status: response.status };
   } catch (error) {
     clearTimeout(timeoutId);
@@ -111,18 +101,9 @@ export default function AssignPage() {
   const [rfid, setRfid] = useState("");
   const [status, setStatus] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [loading, setLoading] = useState(false);
 
   const inputRef = useRef(null);
   const nextUnassignedIndexRef = useRef(0);
-
-  // Check BASE_URL on component mount
-  useEffect(() => {
-    if (!BASE_URL) {
-      console.error('❌ VITE_API_BASE_URL is not configured');
-      showStatus("API endpoint not configured. Please check environment variables.", "error");
-    }
-  }, []);
 
   // Initialize students when filters selected
   useEffect(() => {
@@ -163,113 +144,35 @@ export default function AssignPage() {
   }, []);
 
   const assignRfid = useCallback(async () => {
-    if (!BASE_URL) {
-      showStatus("API endpoint not configured", "error");
-      return;
-    }
-
     const rfidValue = rfid.trim();
     if (!rfidValue) return;
 
-    setLoading(true);
-
-    // If a student is selected, assign to that student
-    if (selectedStudent) {
-      // Check if selected student already has an RFID
-      if (selectedStudent.rfid) {
-        showStatus(`${selectedStudent.name} already has an RFID assigned`, "error");
-        setRfid("");
-        setLoading(false);
-        return;
-      }
-
-      // Optimistic UI update for selected student
-      setRawStudents((prev) =>
-        prev.map((s) => (s.id === selectedStudent.id ? { ...s, rfid: rfidValue } : s))
-      );
-      setRfid("");
-
-      try {
-        // Pad to 10 digits
-        let cardNumber = rfidValue;
-        if (cardNumber.length < 10) {
-          cardNumber = cardNumber.padStart(10, '0');
-        }
-
-        console.log('🎯 Assigning to selected student:', {
-          student: selectedStudent.name,
-          cardNumber: cardNumber
-        });
-
-        // Fixed the API call - add trailing slash to prevent redirect
-        const result = await apiClient.post(
-          `/assignments/?user_id=${selectedStudent.id}&card_number=${cardNumber}`
-        );
-        const assignmentId = result.data.id;
-
-        setRawStudents((prev) =>
-          prev.map((s) =>
-            s.id === selectedStudent.id ? { ...s, assignment_id: assignmentId } : s
-          )
-        );
-
-        showStatus(`✅ Assigned to ${selectedStudent.name}`, "success");
-      } catch (error) {
-        // Revert on error
-        setRawStudents((prev) =>
-          prev.map((s) => (s.id === selectedStudent.id ? { ...s, rfid: null } : s))
-        );
-        showStatus(`Assignment failed: ${error.message}`, "error");
-      } finally {
-        setLoading(false);
-        setTimeout(() => inputRef.current?.focus(), 50);
-      }
-      return;
-    }
-
-    // Auto-rotation logic when no student is selected
     const unassigned = students.filter((s) => !s.rfid);
     if (unassigned.length === 0) {
-      showStatus("No unassigned students in current view. Please change filters or select a student.", "warning");
+      showStatus("No unassigned students left", "error");
       setRfid("");
-      setLoading(false);
-      setTimeout(() => inputRef.current?.focus(), 50);
       return;
     }
 
-    // Find the next unassigned student based on the current index
-    // Use the current index and wrap around if needed
     const idx = nextUnassignedIndexRef.current % unassigned.length;
     const student = unassigned[idx];
 
-    // Update the index for the next assignment
-    nextUnassignedIndexRef.current = nextUnassignedIndexRef.current + 1;
-
-    console.log('🔄 Auto-assigning to:', {
-      student: student.name,
-      index: idx,
-      totalUnassigned: unassigned.length
-    });
-
-    // Optimistic UI update for auto-rotation
+    // Optimistic UI update
     setRawStudents((prev) =>
       prev.map((s) => (s.id === student.id ? { ...s, rfid: rfidValue } : s))
     );
     setRfid("");
+    nextUnassignedIndexRef.current = idx + 1;
 
     try {
-      // Pad to 10 digits
-      let cardNumber = rfidValue;
-      if (cardNumber.length < 10) {
-        cardNumber = cardNumber.padStart(10, '0');
+      // Send as query parameters instead of request body
+      const cardNumber = parseInt(rfidValue, 10);
+      if (isNaN(cardNumber) || cardNumber <= 0) {
+        showStatus("Invalid card number", "error");
+        return;
       }
 
-      console.log('📡 Sending assignment request:', {
-        user_id: student.id,
-        card_number: cardNumber
-      });
-
-      // Send as query parameters (preserves string format)
+      // Use query parameters for the API call
       const result = await apiClient.post(
         `/assignments/?user_id=${student.id}&card_number=${cardNumber}`
       );
@@ -287,37 +190,26 @@ export default function AssignPage() {
       setRawStudents((prev) =>
         prev.map((s) => (s.id === student.id ? { ...s, rfid: null } : s))
       );
-      // Don't update the index on failure, so the same student can be retried
       showStatus(`Assignment failed: ${error.message}`, "error");
     } finally {
-      setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [rfid, students, selectedStudent, showStatus]);
+  }, [rfid, students, showStatus]);
 
-  // Auto-submit when RFID is entered
   useEffect(() => {
-    if (rfid.trim() && !loading) {
+    if (rfid.trim()) {
       const timeout = setTimeout(assignRfid, 300);
       return () => clearTimeout(timeout);
     }
-  }, [rfid, assignRfid, loading]);
+  }, [rfid, assignRfid]);
 
   const handleRemove = useCallback(
     async (student) => {
-      if (!BASE_URL) {
-        showStatus("API endpoint not configured", "error");
-        return;
-      }
-
-      setLoading(true);
-
       if (!student.assignment_id) {
         setRawStudents((prev) =>
           prev.map((s) => (s.id === student.id ? { ...s, rfid: null } : s))
         );
         showStatus("RFID removed (local)", "warning");
-        setLoading(false);
         return;
       }
 
@@ -326,7 +218,7 @@ export default function AssignPage() {
       );
 
       try {
-        await apiClient.delete(`/assignments/${student.assignment_id}/`);
+        await apiClient.delete(`/assignments/${student.assignment_id}`);
         showStatus("Assignment deleted", "success");
       } catch (error) {
         setRawStudents((prev) =>
@@ -337,8 +229,6 @@ export default function AssignPage() {
           )
         );
         showStatus(`Delete failed: ${error.message}`, "error");
-      } finally {
-        setLoading(false);
       }
     },
     [showStatus]
@@ -364,12 +254,6 @@ export default function AssignPage() {
   return (
     <div className="p-6 text-gray-100 bg-gray-900 min-h-screen">
       <h2 className="text-2xl font-semibold mb-4">RFID Assignment</h2>
-
-      {!BASE_URL && (
-        <div className="mb-4 p-3 bg-red-900 border border-red-700 rounded-lg">
-          <p className="text-red-100">⚠️ API endpoint not configured. Please set VITE_API_BASE_URL environment variable.</p>
-        </div>
-      )}
 
       <FiltersBar
         classes={MOCK_CLASSES}
@@ -411,8 +295,7 @@ export default function AssignPage() {
         rfid={rfid}
         setRfid={setRfid}
         assignRfid={assignRfid}
-        loading={loading}
-        disabled={!BASE_URL}
+        loading={false}
       />
 
       {selectedStudent && (
@@ -427,7 +310,7 @@ export default function AssignPage() {
         selectedStudent={selectedStudent}
         handleRowDoubleClick={(s) => setSelectedStudent(s)}
         handleRemove={handleRemove}
-        loading={loading}
+        loading={false}
         getUniqueId={getUniqueId}
       />
 

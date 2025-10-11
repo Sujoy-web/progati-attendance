@@ -11,8 +11,9 @@ import CardSignin from "./Components/Signin/CardSignin";
 import RfidAttendancePage from "./Pages/RfidAttendancePage";
 
 import YearPlannerDemo from "./Pages/YearPlannerDemo";
-import ManualAttendance from "./Pages/ManualAttendance";
-import RfidAttendancePageDemo from "./Pages/AttendanceDemo";
+
+import ManualRfidAttendancePage from "./Pages/ManualAttendance";
+
 
 function App() {
   return (
@@ -23,7 +24,7 @@ function App() {
           <Route path="/" element={<CardSignin />} />
           <Route path="/signin" element={<Signin />} />
           <Route path="/card-signin" element={<CardSignin />} />
-          <Route path="/mattendance" element={<ManualAttendance />} />
+      
           <Route path="/attendance" element={<RfidAttendancePage />} />
           {/* Protected routes with layout */}
           <Route element={<AppLayout />}>
@@ -33,8 +34,8 @@ function App() {
             <Route path="/yearplannerDemo" element={<YearPlannerDemo />} />
             {/* <Route path="/timesetup" element={<TimeSetupPage />} /> */}
 
-            <Route path="/attendance" element={<RfidAttendancePage />} />
-                <Route path="/attendanceDemo" element={<RfidAttendancePageDemo />} />
+            <Route path="/mattendance" element={<ManualRfidAttendancePage />} />
+              
           </Route>
         </Routes>
       </Router>

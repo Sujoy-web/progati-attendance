@@ -2,7 +2,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-export default function RfidAttendancePage() {
+export default function ManualRfidAttendancePage() {
   const [inOutStatus, setInOutStatus] = useState(false); // false = IN, true = OUT
   const [error, setError] = useState('');
   const [successData, setSuccessData] = useState(null);
@@ -74,7 +74,7 @@ export default function RfidAttendancePage() {
 
   // Manual test button handler
   const handleManualTest = async () => {
-    const cardValue = 7395821648;
+    const cardValue = '7395821648'; // 10-digit format to match scanned cards
     const statusValue = inOutStatus ? 'Check_OUT' : 'Check_IN';
     
     setIsLoading(true);
@@ -119,8 +119,14 @@ export default function RfidAttendancePage() {
         setError('');
         setSuccessData(null);
 
-        // Parse card: number if fully numeric, else keep as string
-        const cardValue = /^\d+$/.test(card) ? parseInt(card, 10) : card;
+        // Format card as 10-digit string to match AssignPage.jsx behavior
+        let cardValue = card;
+        if (/^\d+$/.test(card)) {
+          // Pad to 10 digits if numeric
+          if (card.length < 10) {
+            cardValue = card.padStart(10, '0');
+          }
+        }
         const statusValue = inOutStatus ? 'Check_OUT' : 'Check_IN';
 
         try {
